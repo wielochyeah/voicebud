@@ -370,7 +370,10 @@ final class ScreenText {
     /// which one the region will be read as, and that is the one it is read as
     private func pollOption() {
         guard selecting else { return stopWatchingOption() }
-        guard taps.feed(NSEvent.modifierFlags.intersection(Self.keys)), !dictationBusy else { return }
+        // only while the island shows the choice (a dictation started meanwhile has the island:
+        // a tap then would switch unseen, review 05.10.)
+        guard taps.feed(NSEvent.modifierFlags.intersection(Self.keys)),
+              state.mode == .ocr, state.phase == .recording else { return }
         setFormula(!formula, animated: true)
     }
 
@@ -435,6 +438,11 @@ final class ScreenText {
         switch phase {
         case .idle, .empty:
             deliverPending()
+            // a dictation came and went while the crosshair is still out: the choice is shown again
+            if selecting && busy {
+                hintShown = false
+                showHint()
+            }
         case .done, .error:
             // the core's idle follows the card (3.4 s); should it not come, the result still does
             if pending != nil { scheduleFallback(4) }
@@ -527,6 +535,10 @@ final class ScreenText {
 
     private var last: Result?
     private var lastFormat = Format.rich
+    /// Word's font at the cursor, asked when Word comes to the front with a formula on the
+    /// clipboard (05.10., Nils: the text around the formulas should look like the line it goes into)
+    private var wordFont: (name: String, size: Double)?
+    private var askingWord = false
     private var ownChange = 0
     private var watchUntil: Date?
     private var activation: NSObjectProtocol?
@@ -536,8 +548,11 @@ final class ScreenText {
     /// would be asked once, by Raycast's history right away, and then stay fixed: tried 04.10.)
     private func publish(_ r: Result) {
         last = r
-        write(format(for: NSWorkspace.shared.frontmostApplication, r), transient: false)
+        wordFont = nil
+        let front = NSWorkspace.shared.frontmostApplication
+        write(format(for: front, r), transient: false)
         if r.html != nil || r.formula != nil { watchSwitches() } else { stopWatching() }
+        askWordFont(front)
     }
 
     private func stopWatching() {
@@ -576,7 +591,8 @@ final class ScreenText {
         case .rich: Self.copy(r.text, html: r.html, tsv: r.tsv, transient: transient)
         case .plain: Self.copy(r.text, html: nil, tsv: r.tsv, transient: transient)
         case .latex: Self.copy(r.formula?.markdown ?? r.text, html: nil, transient: transient)
-        case .equations: Self.copy(r.formula?.plain ?? r.text, html: r.formula?.html, transient: transient)
+        case .equations: Self.copy(r.formula?.plain ?? r.text, html: r.formula.map { Self.fonted($0.html, wordFont) },
+                                   transient: transient)
         case .characters: Self.copy(r.formula?.plain ?? r.text, html: nil, transient: transient)
         }
         lastFormat = format
@@ -602,6 +618,53 @@ final class ScreenText {
         }
         let wanted = format(for: app, r)
         if wanted != lastFormat { write(wanted, transient: true) }
+        askWordFont(app)                    // back in Word: the cursor may stand in another font now
+    }
+
+    /// Word in front with equations on the clipboard: ask it for the font at the cursor (osascript,
+    /// off the main thread, ~0.1 s; macOS asks once for "VoiceBud may control Word"). Only the
+    /// font's name and size are read. Refused or mixed fonts: the document's Normal style stays.
+    private func askWordFont(_ app: NSRunningApplication?) {
+        guard state.settings.wordFontFromCursor, !askingWord, app?.bundleIdentifier == "com.microsoft.Word",
+              let r = last, r.formula != nil, format(for: app, r) == .equations else { return }
+        askingWord = true
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        // (2 s at most: Word with a dialog open would otherwise keep the question for two minutes)
+        p.arguments = ["-e", "with timeout of 2 seconds\ntell application id \"com.microsoft.Word\" to get {name, font size} of font object of selection\nend timeout"]
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = FileHandle.nullDevice
+        p.terminationHandler = { proc in
+            let answer = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let ok = proc.terminationStatus == 0
+            DispatchQueue.main.async { MainActor.assumeIsolated { ScreenText.shared?.gotWordFont(ok ? answer : "") } }
+        }
+        do { try p.run() } catch { askingWord = false; return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { if p.isRunning { p.terminate() } }
+    }
+
+    private func gotWordFont(_ answer: String) {
+        askingWord = false
+        let parts = answer.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: ", ")
+        guard parts.count == 2, !parts[0].isEmpty, parts[0] != "missing value",
+              let size = Double(parts[1].replacingOccurrences(of: ",", with: ".")), size > 0 else { return }
+        let font = (name: parts[0], size: size)
+        guard wordFont.map({ $0 != font }) ?? true else { return }
+        wordFont = font
+        // still ours and still meant for Word: the same content again, now in the cursor's font
+        guard NSPasteboard.general.changeCount == ownChange, lastFormat == .equations else { return }
+        write(.equations, transient: true)
+        IPC.log("screen text: formulas in Word's font at the cursor")
+    }
+
+    /// the Normal-style paragraphs of formula.html in a given font
+    static func fonted(_ html: String, _ font: (name: String, size: Double)?) -> String {
+        guard let font else { return html }
+        let name = font.name.replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "\"", with: "")
+        let size = String(format: "%g", font.size)
+        return html.replacingOccurrences(of: "class=\"MsoNormal\"",
+                                         with: "class=\"MsoNormal\" style=\"font-family:'\(name)';font-size:\(size)pt\"")
     }
 
     /// the card's "Kopieren": the whole result again, table included

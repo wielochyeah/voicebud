@@ -48,6 +48,7 @@ cat > "$UIAPP/Contents/Info.plist" <<'UIPLIST'
     <key>CFBundleShortVersionString</key><string>2.0</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>LSUIElement</key><true/>
+    <key>NSAppleEventsUsageDescription</key><string>VoiceBud fragt Word nur nach Schrift und Größe an deinem Cursor, damit eingefügte Formeln zum Text passen.</string>
 </dict>
 </plist>
 UIPLIST
@@ -69,6 +70,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>LSUIElement</key><true/>
     <key>NSMicrophoneUsageDescription</key>
     <string>VoiceBud nimmt nur auf, während du diktierst (Hotkey gedrückt).</string>
+    <key>NSAppleEventsUsageDescription</key><string>VoiceBud fragt Word nur nach Schrift und Größe an deinem Cursor, damit eingefügte Formeln zum Text passen.</string>
 </dict>
 </plist>
 PLIST

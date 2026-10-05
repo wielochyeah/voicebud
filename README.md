@@ -79,7 +79,7 @@ Press `shift+cmd+2`, tap `option`, then drag. The island switches to "Select for
 
 What lands on the clipboard depends on where you paste:
 - **Claude, ChatGPT, browsers, Notion, Obsidian, code editors:** Markdown with LaTeX (`$\sigma^2$`, `$$z_a = \frac{a - \mu}{\sigma}$$`), which they show as formulas or keep as source.
-- **Word:** real, editable equations.
+- **Word:** real, editable equations, with the text around them in the font at your cursor (macOS asks once whether VoiceBud may control Word; it only reads the font's name and size).
 - **Notes, Mail and everything else:** readable characters, for example σ², √(x + 1), (a − μ)/σ.
 
 You can change this for each app, and add apps, in the hub under Text Recognition:

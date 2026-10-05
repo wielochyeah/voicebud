@@ -69,8 +69,10 @@ $4
 </plist>
 PLIST
 }
-plist VoiceBud "$BUNDLE_ID.ui" VoiceBudUI "" > "$UIAPP/Contents/Info.plist"
-plist VoiceBud "$BUNDLE_ID" VoiceBud "    <key>NSMicrophoneUsageDescription</key><string>VoiceBud hört nur zu, während du diktierst. Alles bleibt auf diesem Mac.</string>" \
+APPLE_EVENTS="    <key>NSAppleEventsUsageDescription</key><string>VoiceBud fragt Word nur nach Schrift und Größe an deinem Cursor, damit eingefügte Formeln zum Text passen.</string>"
+plist VoiceBud "$BUNDLE_ID.ui" VoiceBudUI "$APPLE_EVENTS" > "$UIAPP/Contents/Info.plist"
+plist VoiceBud "$BUNDLE_ID" VoiceBud "    <key>NSMicrophoneUsageDescription</key><string>VoiceBud hört nur zu, während du diktierst. Alles bleibt auf diesem Mac.</string>
+$APPLE_EVENTS" \
     > "$C/Info.plist"
 
 echo "build-dmg: Starter"

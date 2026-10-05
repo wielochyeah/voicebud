@@ -218,13 +218,15 @@ final class HubModel {
     let isPreview: Bool
 
     var pane: HubPane = .verlauf {
-        didSet {   // Verlauf and Texterkennung show the same list view over two histories
-            if (pane == .texterkennung) != (oldValue == .texterkennung), pane == .verlauf || pane == .texterkennung {
-                query = ""
-                reloadHistory()
-            }
+        didSet {   // Verlauf and Erkannte Texte show the same list view over two histories
+            guard pane == .verlauf || pane == .texterkennung, loadedOCR != (pane == .texterkennung) else { return }
+            query = ""
+            reloadHistory()
         }
     }
+    /// which of the two histories the list holds (review 05.10.: Erkannte Texte, a settings pane,
+    /// then Verlauf showed the recognized texts under Verlauf)
+    private var loadedOCR = false
     var ocrPane: Bool { pane == .texterkennung }
     private(set) var query = ""
     private(set) var entries: [HistoryEntry] = []
@@ -287,6 +289,7 @@ final class HubModel {
 
     func reloadHistory(keepCount: Bool = false) {
         guard let store else { return }
+        loadedOCR = ocrPane
         let limit = keepCount ? max(HistoryStore.pageSize, entries.count) : HistoryStore.pageSize
         let rows = fetch(store, limit: limit, offset: 0)
         entries = rows
@@ -2738,6 +2741,11 @@ struct HubScreenTextPane: View {
                 if model.state.settings.screenText {
                     HubGroupLabel(L("Formeln"), top: 20)
                     HubCard {
+                        HubRow(L("Schrift in Word anpassen"),
+                               subtitle: L("Der Text um die Formeln nimmt die Schrift an deinem Cursor. macOS fragt dafür einmal, ob VoiceBud Word steuern darf.")) {
+                            HubSwitch(isOn: model.binding(\.wordFontFromCursor))
+                        }
+                        HubSeparator()
                         HubRow(L("⌥ antippen beim Aufziehen"),
                                subtitle: L("Nach ⇧⌘2 schaltet ⌥ zwischen Text und Formeln um, die Insel zeigt, was gilt. Brüche, Hochzahlen, Wurzeln und der Text drumherum, gelesen vom lokalen Sprachmodell.")) {
                             EmptyView()

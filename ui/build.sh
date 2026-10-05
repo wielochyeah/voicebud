@@ -35,6 +35,7 @@ cat > "$OUT_DIR/Info.plist" <<'PLIST'
     <key>CFBundleIdentifier</key><string>local.voicebud.ui</string>
     <key>CFBundleShortVersionString</key><string>2.0</string>
     <key>LSUIElement</key><true/>
+    <key>NSAppleEventsUsageDescription</key><string>VoiceBud fragt Word nur nach Schrift und Größe an deinem Cursor, damit eingefügte Formeln zum Text passen.</string>
 </dict>
 </plist>
 PLIST
