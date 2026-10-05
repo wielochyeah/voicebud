@@ -6,6 +6,11 @@
 // on the key press so its models load while the user is still dragging, and gone after 2 idle
 // minutes; the UI itself stays inside its RAM budget. Needs the Screen Recording permission,
 // asked on first use.
+//
+// Formulas (05.10., Nils): a tap on ⌥ while the crosshair is out reads the region with the vision
+// part of the local model instead (core → llm_worker, formula.py): fractions, powers, roots and the
+// text around them. The clipboard gets LaTeX for chat apps, browsers and editors, real equations
+// (MathML) for Word, and readable characters (σ², √(x + 1)) for everything else.
 import AppKit
 import Carbon
 
@@ -42,8 +47,18 @@ final class ScreenText {
     /// a dictation recorded since this ⇧⌘2, and whether its text went to the clipboard
     private var dictationSince = false
     private var dictationOnClipboard = false
+    /// one recognition's result; `formula` holds the three renditions of a formula read
+    struct Result {
+        var text: String
+        var html: String?
+        var tsv: String?
+        var tables = 0
+        var words: Any = 0
+        var seconds: Double
+        var formula: (markdown: String, plain: String, html: String)?
+    }
     /// a result waiting for that dictation to finish (its island and its paste come first)
-    private var pending: (text: String, html: String?, tsv: String?, tables: Int, words: Any, seconds: Double)?
+    private var pending: Result?
     /// delivers `pending` should the core's idle not come (one at a time: an old one must not cut
     /// a later dictation's card short)
     private var fallback: DispatchWorkItem?
@@ -54,6 +69,14 @@ final class ScreenText {
         dictationBusy || IPC.island?.showsDictationCard == true
     }
     private var pendingSince: Date?
+    /// ⌥ tapped while choosing (or held when the region was taken): read it as formulas
+    private var formula = false
+    private var optionDown = false
+    private var optionSince = Date.distantPast
+    private var optionTimer: Timer?
+    private var formulaID = 0
+    private var formulaWaiting: (([String: Any]?) -> Void)?
+    private var formulaTimeout: DispatchWorkItem?
 
     func start() {
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -144,6 +167,7 @@ final class ScreenText {
         IPC.island?.excludeFromCapture(true)
         selecting = true
         hintShown = false
+        watchOption()
         if IPC.island?.prepare(then: { [weak self] in self?.showHint() }) == true {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
                 MainActor.assumeIsolated { self?.showHint() }
@@ -165,6 +189,7 @@ final class ScreenText {
         } catch {
             busy = false
             selecting = false
+            stopWatchingOption()
             IPC.island?.excludeFromCapture(false)
             show(["type": "state", "phase": "error", "mode": "ocr", "message": "Bildschirmauswahl nicht verfügbar"])
         }
@@ -200,15 +225,28 @@ final class ScreenText {
     private func captured(_ path: URL) {
         capture = nil
         selecting = false
+        let asFormula = formula || NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask) == .option
+        stopWatchingOption()
         IPC.island?.excludeFromCapture(false)
         guard FileManager.default.fileExists(atPath: path.path) else {
             busy = false                                // Esc: nothing chosen, the island closes quietly
+            state.ocrFormula = false
             if state.mode == .ocr && state.phase == .recording { show(["type": "state", "phase": "idle", "mode": "ocr"]) }
             return
         }
         let t0 = Date()
         // the spinner only where no dictation shows its own island (recording, processing, card)
         if !dictationShowing { show(["type": "state", "phase": "processing", "mode": "ocr"]) }
+        if asFormula {
+            state.ocrFormula = true
+            readFormula(path, since: t0)
+        } else {
+            recognise(path, since: t0)
+        }
+    }
+
+    /// Apple's text recognition in the helper (the usual way)
+    private func recognise(_ path: URL, since t0: Date) {
         request(["op": "ocr", "path": path.path, "lines": Self.keepsLines(source)], timeout: 15) { [weak self] reply in
             try? FileManager.default.removeItem(at: path)
             guard let self else { return }
@@ -235,25 +273,116 @@ final class ScreenText {
                           "bundle": self.source?.bundleIdentifier ?? "", "seconds": Date().timeIntervalSince(t0)])
             }
             IPC.log("screen text: \(text.count) chars, \(tables) tables, recognition \(reply["ms"] ?? 0) ms")
-            let result = (text: text, html: reply["html"] as? String, tsv: reply["tsv"] as? String, tables: tables,
-                          words: reply["words"] ?? 0, seconds: Date().timeIntervalSince(t0))
-            self.pending = result
-            self.pendingSince = Date()
-            if dictation {
-                // no clipboard write and no card over the dictation's island now: the result
-                // follows its idle (or the fallback)
-                IPC.log("screen text: waits for the dictation to finish")
-                self.scheduleFallback(5)
-                return
-            }
-            self.deliverPending()
+            self.hold(Result(text: text, html: reply["html"] as? String, tsv: reply["tsv"] as? String, tables: tables,
+                             words: reply["words"] ?? 0, seconds: Date().timeIntervalSince(t0)), dictation: dictation)
         }
     }
 
-    private func deliver(_ r: (text: String, html: String?, tsv: String?, tables: Int, words: Any, seconds: Double)) {
-        publish(r.text, html: r.html, tsv: r.tsv)
-        show(["type": "state", "phase": "done", "mode": "ocr",
-              "app": r.tables > 0 ? (r.tables == 1 ? "Tabelle erkannt" : "\(r.tables) Tabellen erkannt") : "",
+    /// the vision part of the local model, through the core (which also keeps the history entry)
+    private func readFormula(_ path: URL, since t0: Date) {
+        formulaID += 1
+        let id = formulaID
+        formulaWaiting = { [weak self] reply in
+            guard let self else { return }
+            let error = reply?["error"] as? String
+            if error == "unavailable" {
+                // the model is off or not downloaded: the usual recognition, so ⇧⌘2 still gives text
+                IPC.log("screen text: formula reader unavailable, plain recognition instead")
+                self.state.ocrFormula = false
+                self.recognise(path, since: t0)
+                return
+            }
+            try? FileManager.default.removeItem(at: path)
+            self.busy = false
+            self.state.ocrFormula = false
+            let dictation = self.dictationShowing
+            guard let reply, error == nil,
+                  let markdown = reply["markdown"] as? String, let plain = reply["plain"] as? String,
+                  let html = reply["html"] as? String, !plain.isEmpty else {
+                if dictation { return }
+                self.show(["type": "state", "phase": "error", "mode": "ocr",
+                           "message": reply == nil ? "Formelerkennung hat nicht geantwortet" : "Kein Text gefunden"])
+                return
+            }
+            let words = plain.split(whereSeparator: \.isWhitespace).count
+            IPC.log("screen text: formula read, \(plain.count) chars in \(String(format: "%.1f", Date().timeIntervalSince(t0))) s")
+            self.hold(Result(text: plain, words: words, seconds: Date().timeIntervalSince(t0),
+                             formula: (markdown, plain, html)), dictation: dictation)
+        }
+        IPC.send(["type": "formula", "id": id, "path": path.path, "app": source?.localizedName ?? "",
+                  "bundle": source?.bundleIdentifier ?? ""])
+        // first use loads the model (~2.5 s) and reads (1-3 s); a long page takes longer
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.formulaResult(["id": id, "timeout": true]) }
+        }
+        formulaTimeout = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 60, execute: work)
+    }
+
+    /// IPC "formula_result" (or the timeout): only the answer to the newest request counts
+    func formulaResult(_ msg: [String: Any]) {
+        guard (msg["id"] as? Int) == formulaID, let w = formulaWaiting else { return }
+        formulaWaiting = nil
+        formulaTimeout?.cancel()
+        w(msg["timeout"] != nil ? nil : msg)
+    }
+
+    /// the result out now, or after the dictation whose island is up
+    private func hold(_ result: Result, dictation: Bool) {
+        pending = result
+        pendingSince = Date()
+        if dictation {
+            // no clipboard write and no card over the dictation's island now: the result
+            // follows its idle (or the fallback)
+            IPC.log("screen text: waits for the dictation to finish")
+            scheduleFallback(5)
+            return
+        }
+        deliverPending()
+    }
+
+    // MARK: ⌥ for formulas
+
+    /// NSEvent's modifier state is read, not watched: no event monitor and no extra permission
+    private func watchOption() {
+        formula = false
+        optionDown = false
+        state.ocrFormula = false
+        optionTimer?.invalidate()
+        let t = Timer(timeInterval: 0.04, repeats: true) { _ in
+            MainActor.assumeIsolated { ScreenText.shared?.pollOption() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        optionTimer = t
+    }
+
+    private func stopWatchingOption() {
+        optionTimer?.invalidate()
+        optionTimer = nil
+    }
+
+    /// a tap: ⌥ alone, down and up again within 0.6 s
+    private func pollOption() {
+        guard selecting else { return stopWatchingOption() }
+        let flags = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags == .option {
+            if !optionDown { optionDown = true; optionSince = Date() }
+            return
+        }
+        if optionDown && flags.isEmpty && Date().timeIntervalSince(optionSince) < 0.6 {
+            formula.toggle()
+            state.ocrFormula = formula
+            if formula { IPC.send(["type": "formula_warm"]) }      // the model loads while the user drags
+            IPC.log("screen text: formulas \(formula ? "on" : "off")")
+        }
+        optionDown = false
+    }
+
+    private func deliver(_ r: Result) {
+        publish(r)
+        let label = r.formula != nil ? "Formel erkannt"
+            : r.tables > 0 ? (r.tables == 1 ? "Tabelle erkannt" : "\(r.tables) Tabellen erkannt") : ""
+        show(["type": "state", "phase": "done", "mode": "ocr", "app": label,
               "words": r.words, "seconds": r.seconds,
               "preview": Self.preview(Self.withoutTableSyntax(r.text)), "target": "clipboard", "text": r.text])
     }
@@ -338,19 +467,35 @@ final class ScreenText {
         "ru.keepcoder.Telegram", "org.whispersystems.signal-desktop", "ai.perplexity.mac",
     ]
 
-    private var last: (text: String, html: String?, tsv: String?)?
-    private var lastRich = true
+    /// Formulas: where LaTeX is understood or kept (chat apps, browsers with ChatGPT, Claude,
+    /// Overleaf or Notion, editors and terminals, Markdown notes) the clipboard holds the Markdown
+    /// with LaTeX; Word gets real equations; every other app readable characters
+    static let latexApps: Set<String> = plainOnly.union(lineApps).union([
+        "com.apple.Safari", "com.apple.SafariTechnologyPreview", "com.google.Chrome", "com.google.Chrome.canary",
+        "company.thebrowser.Browser", "company.thebrowser.dia", "org.mozilla.firefox", "com.microsoft.edgemac",
+        "com.brave.Browser", "com.kagi.kagimacOS", "com.vivaldi.Vivaldi", "com.operasoftware.Opera",
+        "app.zen-browser.zen", "notion.id", "md.obsidian", "abnerworks.Typora", "net.shinyfrog.bear",
+        "com.electron.logseq", "com.lukilabs.lukiapp",
+    ])
+    /// tested 05.10. on Word 16.113: every <math> of pasted HTML becomes an editable equation
+    static let equationApps: Set<String> = ["com.microsoft.Word"]
+
+    /// what the clipboard holds for one app
+    enum Format { case rich, plain, latex, equations, characters }
+
+    private var last: Result?
+    private var lastFormat = Format.rich
     private var ownChange = 0
     private var watchUntil: Date?
     private var activation: NSObjectProtocol?
 
-    /// written for the app in front, and written again when the user switches between a chat app
-    /// and any other while it is still on the clipboard (a deferred pasteboard promise would be
-    /// asked once, by Raycast's history right away, and then stay fixed: tried 04.10.)
-    private func publish(_ text: String, html: String?, tsv: String?) {
-        last = (text, html, tsv)
-        write(rich: Self.rich(for: NSWorkspace.shared.frontmostApplication), transient: false)
-        if html != nil { watchSwitches() } else { stopWatching() }
+    /// written for the app in front, and written again when the user switches to an app that
+    /// wants another version while it is still on the clipboard (a deferred pasteboard promise
+    /// would be asked once, by Raycast's history right away, and then stay fixed: tried 04.10.)
+    private func publish(_ r: Result) {
+        last = r
+        write(Self.format(for: NSWorkspace.shared.frontmostApplication, r), transient: false)
+        if r.html != nil || r.formula != nil { watchSwitches() } else { stopWatching() }
     }
 
     private func stopWatching() {
@@ -359,14 +504,24 @@ final class ScreenText {
         watchUntil = nil
     }
 
-    private static func rich(for app: NSRunningApplication?) -> Bool {
-        !(app?.bundleIdentifier.map(plainOnly.contains) ?? false)
+    static func format(for app: NSRunningApplication?, _ r: Result) -> Format {
+        let id = app?.bundleIdentifier ?? ""
+        if r.formula != nil {
+            return latexApps.contains(id) ? .latex : equationApps.contains(id) ? .equations : .characters
+        }
+        return plainOnly.contains(id) ? .plain : .rich
     }
 
-    private func write(rich: Bool, transient: Bool) {
-        guard let last else { return }
-        Self.copy(last.text, html: rich ? last.html : nil, tsv: last.tsv, transient: transient)
-        lastRich = rich
+    private func write(_ format: Format, transient: Bool) {
+        guard let r = last else { return }
+        switch format {
+        case .rich: Self.copy(r.text, html: r.html, tsv: r.tsv, transient: transient)
+        case .plain: Self.copy(r.text, html: nil, tsv: r.tsv, transient: transient)
+        case .latex: Self.copy(r.formula?.markdown ?? r.text, html: nil, transient: transient)
+        case .equations: Self.copy(r.formula?.plain ?? r.text, html: r.formula?.html, transient: transient)
+        case .characters: Self.copy(r.formula?.plain ?? r.text, html: nil, transient: transient)
+        }
+        lastFormat = format
         ownChange = NSPasteboard.general.changeCount
     }
 
@@ -381,13 +536,14 @@ final class ScreenText {
     }
 
     private func switched(to app: NSRunningApplication?) {
-        guard NSPasteboard.general.changeCount == ownChange, let until = watchUntil, Date() < until else {
+        guard NSPasteboard.general.changeCount == ownChange, let until = watchUntil, Date() < until,
+              let r = last else {
             // something else was copied since (or ten minutes passed): leave the clipboard alone
             stopWatching()
             return
         }
-        let rich = Self.rich(for: app)
-        if rich != lastRich { write(rich: rich, transient: true) }
+        let format = Self.format(for: app, r)
+        if format != lastFormat { write(format, transient: true) }
     }
 
     /// the card's "Kopieren": the whole result again, table included
@@ -396,7 +552,7 @@ final class ScreenText {
         // still on the clipboard as written: nothing to do (a second write would be a second entry
         // in Raycast's history)
         if NSPasteboard.general.changeCount == ownChange { return true }
-        publish(last.text, html: last.html, tsv: last.tsv)
+        publish(last)
         return true
     }
 

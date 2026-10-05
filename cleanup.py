@@ -123,8 +123,9 @@ class Cleaner:
                 print(f"LLM {self.model} is downloaded now; cleanup on.")
         return not getattr(self, "_missing", False)
 
-    def warm(self):
-        """Start the model process if it is not running (returns at once; loading takes ~2 s)."""
+    def warm(self, prefill=True):
+        """Start the model process if it is not running (returns at once; loading takes ~2 s).
+        prefill=False (a formula): no system prompts first, they would queue ahead of it."""
         if not self.usable:
             return
         with self._lock:
@@ -141,6 +142,10 @@ class Cleaner:
                 return
             self._proc = proc
         threading.Thread(target=self._reader, args=(proc,), name="llm-reader", daemon=True).start()
+        if prefill:
+            self._prefill()
+
+    def _prefill(self):
         # the cached system prompts are ready before the take stops (~0.3 s each, while speaking)
         self._send({"op": "prefill", "systems": [self.prompts.system("de", st) for st in ("doc", "mail", "chat")]
                     + [self.prompts.command["de"]]})
@@ -287,6 +292,48 @@ class Cleaner:
         rid = ticket.get("rid")
         if rid is not None:
             self._send({"op": "cancel", "id": rid})
+
+    # -- formulas (05.10.) -------------------------------------------------------------------
+    def warm_formula(self):
+        """⌥ tapped in ⇧⌘2: the model and its vision part get ready while the user still drags."""
+        if not self.usable:
+            return
+        self.warm(prefill=False)
+        self._send({"op": "vision"})          # queued behind the load; nothing to do once built
+
+    def formula(self, image, timeout=60.0):
+        """A screen region read by the vision part of the model: Markdown with LaTeX (formula.py
+        makes the renditions), or None. A real request: speculation yields to it."""
+        if not self.usable:
+            return None
+        cold = not self._alive()
+        self.warm(prefill=False)
+        t = time.time()
+        while not self._ready.wait(0.05):
+            if not self.usable or not self._alive() or time.time() - t > LOAD_TIMEOUT_S:
+                return None
+        rid = next(self._ids)
+        slot = [threading.Event(), None]
+        self._pending[rid] = slot
+        self._tags[rid] = "formula"
+        try:
+            if not self._send({"op": "formula", "id": rid, "image": str(image)}):
+                return None
+            if not slot[0].wait(timeout):
+                self._send({"op": "cancel", "id": rid})
+                return None
+            msg = slot[1]
+            if msg is None or "error" in msg or msg.get("cancelled"):
+                if msg is not None and "error" in msg:
+                    print(f"formula error: {msg['error']}")
+                return None
+            self.formula_stats = dict(msg.get("stats", {}), load=round(time.time() - t, 3) if cold else 0.0)
+            return msg.get("text", "")
+        finally:
+            self._pending.pop(rid, None)
+            self._tags.pop(rid, None)
+            if cold:
+                self._prefill()               # a dictation right after finds its prompts ready
 
     # -- the two jobs -----------------------------------------------------------------------
     def clean(self, text, language=None, terms=(), style="doc", register=None, ticket=None):

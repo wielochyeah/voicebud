@@ -197,6 +197,8 @@ enum IPC {
             if text != state.partialText { state.partialText = text }
         case "prepare":
             island?.prepare()                      // a take is about to start (AlcoveSight)
+        case "formula_result":
+            ScreenText.shared?.formulaResult(msg)  // Texterkennung with ⌥: the core read the region
         case "history_changed":
             state.historyVersion += 1
             hub?.historyDidChange()

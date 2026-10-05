@@ -179,8 +179,8 @@ extension Loc {
 
         // 11 Texterkennung
         "Texterkennung": "Text Recognition",
-        "Drück ⇧⌘2 und zieh einen Bereich auf. VoiceBud liest den Text darin,\nTabellen bleiben Tabellen, alles landet in der Zwischenablage.":
-            "Press ⇧⌘2 and drag over an area. VoiceBud reads the text inside it,\ntables stay tables, and everything goes to the clipboard.",
+        "Drück ⇧⌘2 und zieh einen Bereich auf. VoiceBud liest den Text darin,\nTabellen bleiben Tabellen, alles landet in der Zwischenablage.\nFür Formeln nach ⇧⌘2 einmal ⌥ antippen.":
+            "Press ⇧⌘2 and drag over an area. VoiceBud reads the text inside it,\ntables stay tables, and everything goes to the clipboard.\nFor formulas, tap ⌥ once after ⇧⌘2.",
         "Bildschirmaufnahme erlauben": "Allow Screen Recording",
         "Wirkt nach dem Neustart am Ende": "Takes effect after the restart at the end",
         "in den Systemeinstellungen „VoiceBud“": "“VoiceBud” under Screen & System Audio Recording",
@@ -201,7 +201,7 @@ extension Loc {
         "Verbesserte Wörter merkt sich VoiceBud.": "VoiceBud remembers the words you correct.",
         "Kürzel": "Snippets",
         "Aus „meine Signatur“ wird der ganze Text.": "“My signature” turns into the full text.",
-        "⇧⌘2 drücken und einen Bereich aufziehen.": "Press ⇧⌘2 and drag over an area.",
+        "⇧⌘2 drücken, Bereich aufziehen, ⌥ für Formeln.": "Press ⇧⌘2 and drag over an area, tap ⌥ for formulas.",
         "Verlauf und Einstellungen": "History and settings",
         "Klick auf das Mikrofon in der Menüleiste.": "Click the microphone in the menu bar.",
     ]

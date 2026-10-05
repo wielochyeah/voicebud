@@ -1863,7 +1863,7 @@ struct HubGeneralPane: View {
                 }
                 HubGroupLabel(L("Texterkennung"), top: 20)
                 HubCard {
-                    HubRow(L("Texterkennung mit ⇧⌘2"), subtitle: L("Bereich aufziehen, der Text landet in der Zwischenablage")) {
+                    HubRow(L("Texterkennung mit ⇧⌘2"), subtitle: L("Bereich aufziehen, der Text landet in der Zwischenablage. ⌥ antippen für Formeln")) {
                         HubSwitch(isOn: model.binding(\.screenText))
                     }
                     HubSeparator()

@@ -74,6 +74,8 @@ final class AppState {
     /// usual for this Mac and this take length; nil = the default 10 s)
     var hintAfter: Double?
     var recordingStarted: Date?
+    /// Texterkennung: ⌥ was tapped while choosing, the region is read with its formulas (05.10.)
+    var ocrFormula = false
     var hotkeys: [String: String] = ["dictate": "ctrl+shift", "prompt": "ctrl+alt"]
     /// bumped on every `history_changed` message so views can reload
     var historyVersion: Int = 0

@@ -90,6 +90,10 @@ extension Loc {
 
         // Texterkennung (ScreenText)
         "Bereich wählen": "Select an area",
+        "Formel wählen": "Select formula",
+        "⌥ Formel": "⌥ Formula",
+        "Formel erkannt": "Formula recognized",
+        "Formelerkennung hat nicht geantwortet": "Formula reader did not answer",
         "Text erkannt": "Text recognized",
         "Tabelle erkannt": "Table recognized",
         "%d Tabellen erkannt": "%d tables recognized",

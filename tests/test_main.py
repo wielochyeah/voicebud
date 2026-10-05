@@ -190,6 +190,30 @@ class ProcessTest(unittest.TestCase):
         take.lang_final = None             # even if the detected language were cleared, fixed wins
         self.assertEqual(take._language(None, None, 1.0), "en")
 
+    def test_formula_reaches_the_ui_in_three_renditions_and_the_history(self):
+        """⇧⌘2 with ⌥ (05.10.): the model's Markdown goes to the UI as markdown, plain and html,
+        and into the recognition's history; a missing model says "unavailable" (the UI then
+        falls back to the usual recognition)."""
+        sent, rows = [], []
+        self.vb.ui.send = lambda msg: sent.append(msg)
+        self.vb.history.add = lambda **row: rows.append(row)
+        self.vb.cleaner.formula = lambda path: "Varianz $\\sigma^2$:\n\n$$z_a = \\frac{a - \\mu}{\\sigma}$$"
+        self.vb._read_formula({"type": "formula", "id": 3, "path": "/tmp/x.png", "app": "Safari", "bundle": "com.apple.Safari"})
+        r = [m for m in sent if m.get("type") == "formula_result"][-1]     # (history_changed follows)
+        self.assertEqual(r["id"], 3)
+        self.assertIn("$\\sigma^2$", r["markdown"])
+        self.assertIn("σ²", r["plain"])
+        self.assertIn("zₐ = (a − μ)/σ", r["plain"])
+        self.assertEqual(r["html"].count("<math"), 2)
+        self.assertEqual(rows[-1]["mode"], "ocr")
+        self.assertIn("\\frac", rows[-1]["final"])
+        self.vb.cleaner.formula = lambda path: None
+        self.vb._read_formula({"type": "formula", "id": 4, "path": "/tmp/x.png"})
+        self.assertEqual(sent[-1], {"type": "formula_result", "id": 4, "error": "unavailable"})
+        self.vb.cleaner.formula = lambda path: "  "
+        self.vb._read_formula({"type": "formula", "id": 5, "path": "/tmp/x.png"})
+        self.assertEqual(sent[-1]["error"], "empty")
+
     def test_usual_processing_time_is_learned(self):
         import tempfile
         from pathlib import Path

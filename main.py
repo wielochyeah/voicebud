@@ -27,6 +27,7 @@ import yaml
 from Foundation import NSObject
 
 import context
+import formula
 import inject
 import learn
 import onboarding
@@ -220,7 +221,7 @@ class VoiceBud:
                            on_quit=self.request_quit, on_settings_changed=self.reload_settings,
                            on_probe=self.run_probe, on_onboarding=self._on_onboarding,
                            on_lost=self._ui_lost, on_slow_hint=self._slow_hint_shown,
-                           on_ocr_result=self._ocr_result)
+                           on_ocr_result=self._ocr_result, on_formula=self._formula)
         self.onboarding = onboarding.Onboarding(self)
         self.snippets = snippets.load()
         self.learner = learn.Learner(self._learned, allowed=self._may_learn, own_pids=self._own_pids)
@@ -626,6 +627,37 @@ class VoiceBud:
             self.ui.history_changed()
         except Exception:
             traceback.print_exc()
+
+    def _formula(self, msg):
+        """Texterkennung with ⌥ (05.10.): "formula_warm" while the user still drags (the model and
+        its vision part load meanwhile), "formula" with the captured region. Both on a thread of
+        their own: reading takes seconds and the bridge's reader must stay free."""
+        if msg.get("type") == "formula_warm":
+            threading.Thread(target=self.cleaner.warm_formula, name="formula-warm", daemon=True).start()
+        else:
+            threading.Thread(target=self._read_formula, args=(msg,), name="formula", daemon=True).start()
+
+    def _read_formula(self, msg):
+        """The answer in its three renditions (formula.py) to the UI, which puts the right one on
+        the clipboard for the app in front; the Markdown goes to the recognition's history."""
+        rid, path = msg.get("id"), str(msg.get("path") or "")
+        t = time.time()
+        try:
+            answer = self.cleaner.formula(path) if path else None
+        except Exception:
+            traceback.print_exc()
+            answer = None
+        seconds = time.time() - t
+        if not answer or not answer.strip():
+            self.ui.send({"type": "formula_result", "id": rid, "error": "empty" if answer is not None else "unavailable"})
+            return
+        r = formula.renditions(answer)
+        self.ui.send(dict(r, type="formula_result", id=rid, seconds=round(seconds, 3)))
+        stats = getattr(self.cleaner, "formula_stats", {})
+        print(f"formula: {len(r['markdown'])} chars in {seconds:.1f}s (load {stats.get('load', 0)}s, "
+              f"vision {stats.get('vision_load', 0)}s, {stats.get('tokens', 0)} tokens)")
+        self._ocr_result({"text": r["markdown"], "app": msg.get("app"), "bundle": msg.get("bundle"),
+                          "seconds": seconds})
 
     def _slow_hint_shown(self):
         """The island now offers to cancel the take it shows (UI message slow_hint)."""

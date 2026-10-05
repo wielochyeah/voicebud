@@ -170,7 +170,7 @@ extension Loc {
         "Deutsch": "German",
         "Englisch": "English",
         "Texterkennung mit ⇧⌘2": "Text recognition with ⇧⌘2",
-        "Bereich aufziehen, der Text landet in der Zwischenablage": "Drag over an area and the text goes to the clipboard",
+        "Bereich aufziehen, der Text landet in der Zwischenablage. ⌥ antippen für Formeln": "Drag over an area and the text goes to the clipboard. Tap ⌥ for formulas",
         "Erkannte Texte im Verlauf": "Recognized text in history",
         "Eigener Verlauf, getrennt von den Diktaten": "A separate history, apart from your dictations",
         "Verhalten": "Behavior",

@@ -2386,7 +2386,7 @@ struct OnboardingScreenText: View {
                 .shadow(color: .black.opacity(t.dark ? 0.3 : 0.12), radius: 6, y: 3)
                 .padding(.bottom, OnboardingGap.m)
             OnboardingHeader(title: L("Texterkennung"),
-                             subtitle: L("Drück ⇧⌘2 und zieh einen Bereich auf. VoiceBud liest den Text darin,\nTabellen bleiben Tabellen, alles landet in der Zwischenablage."))
+                             subtitle: L("Drück ⇧⌘2 und zieh einen Bereich auf. VoiceBud liest den Text darin,\nTabellen bleiben Tabellen, alles landet in der Zwischenablage.\nFür Formeln nach ⇧⌘2 einmal ⌥ antippen."))
                 .padding(.bottom, OnboardingGap.l)
             ZStack {
                 slot.id(stateKey).transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -2471,7 +2471,7 @@ struct OnboardingFinish: View {
                     Image(systemName: "text.badge.plus").font(.system(size: 15)).foregroundStyle(Color(hex: 0x22C55E))
                 }
                 HubSeparator()
-                OnboardingRow(L("Texterkennung"), subtitle: L("⇧⌘2 drücken und einen Bereich aufziehen.")) {
+                OnboardingRow(L("Texterkennung"), subtitle: L("⇧⌘2 drücken, Bereich aufziehen, ⌥ für Formeln.")) {
                     Image(systemName: "text.viewfinder").font(.system(size: 15)).foregroundStyle(Color(hex: 0x3E92F0))
                 }
                 HubSeparator()

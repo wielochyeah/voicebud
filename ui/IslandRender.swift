@@ -124,6 +124,22 @@ enum IslandRenderer {
                                               : "Projektstand Oktober Die Prüfung der Übergabeunterlagen ist weitgehend …",
                                   toClipboard: true)
             },
+            // formulas (05.10.): ⌥ tapped while choosing, and the result
+            Scene(name: "ocr-formel-waehlen") { s, m in
+                m.phase = .recording; m.mode = .ocr; s.phase = .recording; s.mode = .ocr; s.ocrFormula = true
+            },
+            Scene(name: "ocr-kapsel-waehlen") { s, m in
+                m.kind = .capsule; m.capsuleTop = 33 + 8; m.phase = .recording; m.mode = .ocr; s.phase = .recording; s.mode = .ocr
+            },
+            Scene(name: "ocr-kapsel-formel-waehlen") { s, m in
+                m.kind = .capsule; m.capsuleTop = 33 + 8; m.phase = .recording; m.mode = .ocr
+                s.phase = .recording; s.mode = .ocr; s.ocrFormula = true
+            },
+            Scene(name: "ocr-formel-erkannt") { _, m in
+                m.phase = .done; m.mode = .ocr
+                m.done = DoneInfo(app: "Formel erkannt", words: 12, seconds: 1.6,
+                                  preview: "zₐ = (a − μ)/σ, P(X < a) = Φ(zₐ), R ∼ N(μ, σ²)", toClipboard: true)
+            },
             Scene(name: "kompakt-recording-fein") { s, m in m.phase = .recording; s.settings.waveStyle = .fein },
             Scene(name: "kompakt-recording-linie") { s, m in m.phase = .recording; s.settings.waveStyle = .linie },
             Scene(name: "live-recording-start") { s, m in

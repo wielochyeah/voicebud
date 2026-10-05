@@ -588,10 +588,11 @@ struct CapsuleSurfaceMask: View {
 
 struct IslandMicBadge: View {
     let mode: Mode
+    var formula = false
     var body: some View {
         ZStack {
             Circle().fill(Palette.accent(mode).opacity(0.22))
-            Image(systemName: mode == .ocr ? "text.viewfinder" : "mic.fill")
+            Image(systemName: mode == .ocr ? (formula ? "function" : "text.viewfinder") : "mic.fill")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(Palette.accent(mode))
         }
@@ -599,13 +600,21 @@ struct IslandMicBadge: View {
     }
 }
 
-/// Texterkennung while the crosshair is out: what the user is doing, in the mode colour
+/// Texterkennung while the crosshair is out: what the user is doing, in the mode colour, and the
+/// way to formulas (05.10.: a tap on ⌥; holding it would make macOS draw the region from its centre)
 struct IslandSelectHint: View {
+    var formula = false
     var body: some View {
-        Text(L("Bereich wählen"))
-            .font(.system(size: 11.5, weight: .medium))
-            .foregroundStyle(Palette.accent(.ocr).opacity(0.9))
-            .fixedSize()
+        HStack(spacing: 7) {
+            Text(formula ? L("Formel wählen") : L("Bereich wählen"))
+                .foregroundStyle(Palette.accent(.ocr).opacity(0.9))
+            if !formula {
+                Text(L("⌥ Formel")).foregroundStyle(.white.opacity(0.42))
+            }
+        }
+        .font(.system(size: 11.5, weight: .medium))
+        .fixedSize()
+        .animation(.easeOut(duration: 0.18), value: formula)
     }
 }
 
@@ -1529,7 +1538,9 @@ struct NotchIslandView: View {
         }
         if live { return IslandMetrics.liveWidth }
         if expanded { return IslandMetrics.hoverWidth }
-        if phase == .recording && model.mode == .ocr { return model.notch.width + 2 * 112 }   // room for "Bereich wählen"
+        if phase == .recording && model.mode == .ocr {                 // "Bereich wählen  ⌥ Formel" or "Formel wählen"
+            return model.notch.width + 2 * (state.ocrFormula ? 112 : 150)
+        }
         return phase == .done ? IslandMetrics.doneWidth : model.notch.width + 2 * IslandMetrics.earWidth
     }
 
@@ -1634,7 +1645,7 @@ struct NotchIslandView: View {
     private var leftEar: some View {
         let t = AnyTransition.islandGlyph(swap: model.contentSwap, toward: .trailing, reduce: reduce)
         return HStack(spacing: 7) {
-            if shown && active { IslandMicBadge(mode: model.mode).transition(t) }
+            if shown && active { IslandMicBadge(mode: model.mode, formula: state.ocrFormula).transition(t) }
             if shown && phase == .recording && model.mode != .ocr { IslandRecDot().transition(t) }
             if shown && phase == .recording && live && model.mode != .ocr {
                 IslandTimerText(start: model.recordingStart, frozen: model.frozenElapsed).transition(t)
@@ -1649,7 +1660,7 @@ struct NotchIslandView: View {
         let t = AnyTransition.islandGlyph(swap: model.contentSwap, toward: .leading, reduce: reduce)
         return ZStack(alignment: .trailing) {
             if shown && phase == .recording && model.mode == .ocr {
-                IslandSelectHint().transition(t)                // Texterkennung: the user drags a region
+                IslandSelectHint(formula: state.ocrFormula).transition(t)   // Texterkennung: the user drags a region
             } else if shown && phase == .recording {
                 WaveformView(style: state.settings.waveStyle, mode: model.mode, live: state.settings.waveLive,
                              levels: { [state] in state.bands }, still: model.stillTime)
@@ -1878,9 +1889,9 @@ struct CapsuleView: View {
     private var pill: some View {
         let t = AnyTransition.islandGlyph(swap: model.contentSwap, toward: .leading, reduce: reduce)
         return HStack(spacing: 10) {
-            IslandMicBadge(mode: model.mode)
+            IslandMicBadge(mode: model.mode, formula: state.ocrFormula)
             if phase == .recording && model.mode == .ocr {
-                IslandSelectHint().transition(t)
+                IslandSelectHint(formula: state.ocrFormula).transition(t)
             } else {
                 if phase == .recording { IslandRecDot().transition(t) }
                 IslandTimerText(start: model.recordingStart, frozen: model.frozenElapsed)
