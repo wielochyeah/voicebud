@@ -40,7 +40,7 @@ enum OCRHelper {
                     continue
                 }
                 iconMs = 0
-                let result = recognise(img, keepLines: msg["lines"] as? Bool ?? false)
+                let result = recognise(trimCutLines(img), keepLines: msg["lines"] as? Bool ?? false)
                 var out: [String: Any] = ["ok": true, "text": result.text, "tsv": result.tsv ?? NSNull(),
                                           "words": result.words, "tables": result.tables,
                                           "ms": Int(Date().timeIntervalSince(t) * 1000),
@@ -62,6 +62,64 @@ enum OCRHelper {
 
     static func load(_ path: String) -> CGImage? {
         NSImage(contentsOfFile: path)?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+    }
+
+    // MARK: cut lines
+
+    /// A selection whose top or bottom edge runs through a line of text: that line is left out.
+    /// Its half letters read as garbage, and Vision even joined one with the full line below it
+    /// (05.10., Nils: "ForaleModus jet s auspreieren auf ist unverändert"; measured: cuts through
+    /// the upper two thirds of a line give "instan an de Leerla", through the descenders "D•unali").
+    /// A band of ink rows touching the edge counts as cut only when it is clearly lower than the
+    /// full lines of the same picture AND its edge row is dense with ink (strokes cut through):
+    /// an intact line that merely touches the edge has only letter tips there, and a whole line
+    /// without ascenders ("nur was neu ist") is low too but must stay.
+    static func trimCutLines(_ img: CGImage) -> CGImage {
+        let w = img.width, h = img.height
+        guard w >= 8, h >= 24 else { return img }
+        var gray = [UInt8](repeating: 0, count: w * h)
+        guard let ctx = CGContext(data: &gray, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w,
+                                  space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue)
+        else { return img }
+        ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))      // row 0 = top of the picture
+        // the background: the most common grey (light or dark mode alike)
+        var hist = [Int](repeating: 0, count: 32)
+        for i in stride(from: 0, to: gray.count, by: 7) { hist[Int(gray[i]) >> 3] += 1 }
+        let bg = (hist.indices.max { hist[$0] < hist[$1] } ?? 31) * 8 + 4
+        // (every other column on big pictures: a full Retina screen in 7 ms instead of 14)
+        let step = w * h > 2_000_000 ? 2 : 1
+        let blank = max(1, w / step / 500)
+        var count = [Int](repeating: 0, count: h)
+        for y in 0..<h {
+            let row = y * w
+            var n = 0
+            for x in stride(from: 0, to: w, by: step) where abs(Int(gray[row + x]) - bg) > 48 { n += 1 }
+            count[y] = n
+        }
+        let inked = count.map { $0 > blank }
+        // bands of inked rows
+        var bands: [(start: Int, end: Int)] = []
+        var start: Int?
+        for y in 0...h {
+            let ink = y < h && inked[y]
+            if ink, start == nil { start = y }
+            if !ink, let s = start { bands.append((s, y)); start = nil }
+        }
+        let inner = bands.filter { $0.start > 0 && $0.end < h }.map { $0.end - $0.start }.sorted()
+        guard bands.count >= 2, !inner.isEmpty else { return img }
+        let line = Double(inner[inner.count / 2])
+        /// low, and its edge row holds at least half the ink of its densest row
+        func cut(_ b: (start: Int, end: Int), edge: Int) -> Bool {
+            guard Double(b.end - b.start) < 0.75 * line else { return false }
+            let densest = count[b.start..<b.end].max() ?? 0
+            return densest > 0 && Double(count[edge]) >= 0.5 * Double(densest)
+        }
+        var top = 0, bottom = h
+        if let first = bands.first, first.start == 0, cut(first, edge: 0) { top = first.end }
+        if let last = bands.last, last.end == h, last.start > top, cut(last, edge: h - 1) { bottom = last.start }
+        guard top > 0 || bottom < h, bottom - top >= 16,
+              let cut = img.cropping(to: CGRect(x: 0, y: top, width: w, height: bottom - top)) else { return img }
+        return cut
     }
 
     // MARK: recognition
