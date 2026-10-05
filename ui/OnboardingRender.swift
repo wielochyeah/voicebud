@@ -43,62 +43,62 @@ enum OnboardingRenderer {
                  label: step == .alcove ? label(step, "nur wenn Alcove läuft") : label(step), step: step)
         }
         out += [
-            Shot(file: "01b-willkommen-aufnahme-light", label: label(.welcome, "Insel nimmt auf"), step: .welcome) {
+            Shot(file: "\(number(.welcome))b-willkommen-aufnahme-light", label: label(.welcome, "Insel nimmt auf"), step: .welcome) {
                 $0.stillHero = .recording
             },
-            Shot(file: "03b-mikrofon-wartet-light", label: label(.microphone, "Dialog offen"), step: .microphone) {
+            Shot(file: "\(number(.microphone))b-mikrofon-wartet-light", label: label(.microphone, "Dialog offen"), step: .microphone) {
                 $0.grants[.microphone] = .requested
             },
-            Shot(file: "03c-mikrofon-abgelehnt-light", label: label(.microphone, "abgelehnt"), step: .microphone) {
+            Shot(file: "\(number(.microphone))c-mikrofon-abgelehnt-light", label: label(.microphone, "abgelehnt"), step: .microphone) {
                 $0.grants[.microphone] = .denied
             },
-            Shot(file: "03d-mikrofon-erteilt-light", label: label(.microphone, "erteilt"), step: .microphone) {
+            Shot(file: "\(number(.microphone))d-mikrofon-erteilt-light", label: label(.microphone, "erteilt"), step: .microphone) {
                 $0.grants[.microphone] = .granted
             },
-            Shot(file: "04b-bedienungshilfen-wartet-light", label: label(.accessibility, "wartet auf den Schalter"),
+            Shot(file: "\(number(.accessibility))b-bedienungshilfen-wartet-light", label: label(.accessibility, "wartet auf den Schalter"),
                  step: .accessibility) {
                 $0.grants[.accessibility] = .requested
             },
-            Shot(file: "04c-bedienungshilfen-erteilt-light", label: label(.accessibility, "erteilt"), step: .accessibility) {
+            Shot(file: "\(number(.accessibility))c-bedienungshilfen-erteilt-light", label: label(.accessibility, "erteilt"), step: .accessibility) {
                 $0.grants[.accessibility] = .granted
             },
-            Shot(file: "05b-eingabe-neustart-light", label: label(.inputMonitoring, "erteilt, Neustart"),
+            Shot(file: "\(number(.inputMonitoring))b-eingabe-neustart-light", label: label(.inputMonitoring, "erteilt, Neustart"),
                  step: .inputMonitoring) {
                 $0.grants[.inputMonitoring] = .granted
                 $0.restartNeeded = true
             },
-            Shot(file: "05c-eingabe-erteilt-light", label: label(.inputMonitoring, "nach dem Neustart"),
+            Shot(file: "\(number(.inputMonitoring))c-eingabe-erteilt-light", label: label(.inputMonitoring, "nach dem Neustart"),
                  step: .inputMonitoring) {
                 $0.grants[.inputMonitoring] = .granted
             },
-            Shot(file: "06b-modelle-offline-light", label: label(.models, "offline"), step: .models) {
+            Shot(file: "\(number(.models))b-modelle-offline-light", label: label(.models, "offline"), step: .models) {
                 $0.models[1].phase = .paused(receivedMB: 1120, totalMB: 2500)
             },
-            Shot(file: "07b-probediktat-hoert-zu-light", label: label(.testDictation, "hört zu"), step: .testDictation) {
+            Shot(file: "\(number(.testDictation))b-probediktat-hoert-zu-light", label: label(.testDictation, "hört zu"), step: .testDictation) {
                 $0.test = .listening
             },
-            Shot(file: "07c-probediktat-wartet-light", label: label(.testDictation, "wartet"), step: .testDictation) {
+            Shot(file: "\(number(.testDictation))c-probediktat-wartet-light", label: label(.testDictation, "wartet"), step: .testDictation) {
                 $0.test = .ready
             },
-            Shot(file: "07d-probediktat-flach-light", label: label(.testDictation, "kein Ton nach 3 s"),
+            Shot(file: "\(number(.testDictation))d-probediktat-flach-light", label: label(.testDictation, "kein Ton nach 3 s"),
                  step: .testDictation) {
                 $0.test = .listening
                 $0.flatSignal = true
             },
-            Shot(file: "08b-darstellung-kapsel-light", label: label(.appearance, "Kapsel"), step: .appearance) {
+            Shot(file: "\(number(.appearance))b-darstellung-kapsel-light", label: label(.appearance, "Kapsel"), step: .appearance) {
                 $0.islandShape = .kapsel
             },
-            Shot(file: "11b-texterkennung-gefragt-light", label: label(.screenText, "Dialog gezeigt"), step: .screenText) {
+            Shot(file: "\(number(.screenText))b-texterkennung-gefragt-light", label: label(.screenText, "Dialog gezeigt"), step: .screenText) {
                 $0.screenTextPreview = false
                 $0.screenTextAsked = true
             },
-            Shot(file: "11c-texterkennung-erteilt-light", label: label(.screenText, "erteilt"), step: .screenText) {
+            Shot(file: "\(number(.screenText))c-texterkennung-erteilt-light", label: label(.screenText, "erteilt"), step: .screenText) {
                 $0.screenTextPreview = true
             },
-            Shot(file: "01-willkommen-dark", label: label(.welcome, "dunkel"), step: .welcome, dark: true),
-            Shot(file: "02-so-funktionierts-dark", label: label(.howItWorks, "dunkel"), step: .howItWorks, dark: true),
-            Shot(file: "03-mikrofon-dark", label: label(.microphone, "dunkel"), step: .microphone, dark: true),
-            Shot(file: "10-mitlesen-dark", label: label(.context, "dunkel"), step: .context, dark: true),
+            Shot(file: "\(number(.welcome))-willkommen-dark", label: label(.welcome, "dunkel"), step: .welcome, dark: true),
+            Shot(file: "\(number(.howItWorks))-so-funktionierts-dark", label: label(.howItWorks, "dunkel"), step: .howItWorks, dark: true),
+            Shot(file: "\(number(.microphone))-mikrofon-dark", label: label(.microphone, "dunkel"), step: .microphone, dark: true),
+            Shot(file: "\(number(.context))-mitlesen-dark", label: label(.context, "dunkel"), step: .context, dark: true),
         ]
         return out
     }

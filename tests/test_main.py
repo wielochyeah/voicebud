@@ -180,14 +180,15 @@ class ProcessTest(unittest.TestCase):
     def test_fixed_language_skips_detection(self):
         import stream
 
-        class Fake:
-            forced_lang, lang_final = "en", None
-
+        class Worker:      # a real Take (no threads with stream=False), only the model is fake
             class stt:
                 @staticmethod
                 def detect_language(*a):
                     raise AssertionError("no detection with a fixed language")
-        self.assertEqual(stream.Take._language(Fake(), None, None, 1.0), "en")
+        take = stream.Take(Worker(), language="en", stream=False)
+        self.assertEqual(take._language(None, None, 1.0), "en")
+        take.lang_final = None             # even if the detected language were cleared, fixed wins
+        self.assertEqual(take._language(None, None, 1.0), "en")
 
     def test_usual_processing_time_is_learned(self):
         import tempfile

@@ -353,6 +353,8 @@ final class OnboardingController: NSObject, NSWindowDelegate {
     private let makeModel: @MainActor () -> OnboardingModel
     /// called after the window closed (the hub uses it to decide the activation policy)
     var onClose: @MainActor () -> Void = {}
+    /// called when the window comes to the front (the bridge reads back what the hub changed)
+    var onBecomeKey: @MainActor () -> Void = {}
 
     init(makeModel: @escaping @MainActor () -> OnboardingModel = { OnboardingModel() }) {
         self.makeModel = makeModel
@@ -392,6 +394,8 @@ final class OnboardingController: NSObject, NSWindowDelegate {
     /// `close()`, not `performClose`: the latter silently does nothing for a window that is not on
     /// screen, and then windowWillClose never runs and the whole tree stays in memory
     func close() { window?.close() }
+
+    func windowDidBecomeKey(_ notification: Notification) { onBecomeKey() }
 
     func windowWillClose(_ notification: Notification) {
         model?.leave()

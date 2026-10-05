@@ -22,7 +22,32 @@ enum OnboardingBridge {
                 }
             }
         }
+        c.onBecomeKey = { [weak c] in
+            // back from the hub: show what it changed, so the next click here starts from there
+            guard let c, let m = c.model else { return }
+            read(m, from: state.settings)
+            c.currentWindow?.title = L("VoiceBud einrichten")
+        }
         controller = c
+    }
+
+    /// the choices of the window as last read or written (see choicesChanged)
+    private struct Choices {
+        let shape: IslandStyle, ui: UILanguage, dictation: DictationLanguage
+        let alcove: OnboardingModel.AlcoveChoice, context: OnboardingModel.ContextLevel
+        @MainActor init(_ m: OnboardingModel) {
+            shape = m.islandShape; ui = m.uiLanguage; dictation = m.dictationLanguage; alcove = m.alcove; context = m.context
+        }
+    }
+    private static var written: Choices?
+
+    private static func read(_ m: OnboardingModel, from s: UISettings) {
+        m.islandShape = s.islandStyle == .kapsel ? .kapsel : .insel
+        m.uiLanguage = s.uiLanguage
+        m.dictationLanguage = s.dictationLanguage
+        m.alcove = OnboardingModel.AlcoveChoice(rawValue: s.alcove.rawValue) ?? .auto
+        m.context = s.contextLevel <= 1 ? .app : s.contextLevel >= 3 ? .window : .cursor
+        written = Choices(m)
     }
 
     static func show() {
@@ -45,11 +70,7 @@ enum OnboardingBridge {
         let m = OnboardingModel()
         m.mock = false
         m.hotkeys = state.hotkeys
-        m.islandShape = state.settings.islandStyle == .kapsel ? .kapsel : .insel
-        m.uiLanguage = state.settings.uiLanguage
-        m.dictationLanguage = state.settings.dictationLanguage
-        m.alcove = OnboardingModel.AlcoveChoice(rawValue: state.settings.alcove.rawValue) ?? .auto
-        m.context = state.settings.contextLevel <= 1 ? .app : state.settings.contextLevel >= 3 ? .window : .cursor
+        read(m, from: state.settings)
         var a = OnboardingActions()
         a.requestPermission = { p in send("request", ["which": p.rawValue]) }
         a.openSettings = { p in NSWorkspace.shared.open(p.settingsURL) }
@@ -62,12 +83,19 @@ enum OnboardingBridge {
         }
         a.micLevels = { on in send("mic", ["on": on]) }
         a.choicesChanged = { model in
-            state.settings.islandStyle = model.islandShape == .kapsel ? .kapsel : .insel
-            state.settings.uiLanguage = model.uiLanguage
-            state.settings.dictationLanguage = model.dictationLanguage
-            state.settings.alcove = AlcoveMode(rawValue: model.alcove.rawValue) ?? .auto
-            state.settings.contextLevel = model.context == .app ? 1 : model.context == .window ? 3 : 2
+            // writes only what was changed in this window: the hub may have changed other settings
+            // since it opened (05.10. review: a later click here put them back)
+            let was = written ?? Choices(model)
+            if model.islandShape != was.shape { state.settings.islandStyle = model.islandShape == .kapsel ? .kapsel : .insel }
+            if model.uiLanguage != was.ui { state.settings.uiLanguage = model.uiLanguage }
+            if model.dictationLanguage != was.dictation { state.settings.dictationLanguage = model.dictationLanguage }
+            if model.alcove != was.alcove { state.settings.alcove = AlcoveMode(rawValue: model.alcove.rawValue) ?? .auto }
+            if model.context != was.context {
+                state.settings.contextLevel = model.context == .app ? 1 : model.context == .window ? 3 : 2
+            }
+            written = Choices(model)
             state.commitSettings()
+            controller?.currentWindow?.title = L("VoiceBud einrichten")   // the language may have changed
         }
         a.finish = { [weak m] in
             state.settings.onboardingDone = true

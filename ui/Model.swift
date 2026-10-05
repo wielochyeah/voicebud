@@ -29,7 +29,7 @@ struct ContextInfo: Equatable {
 
     /// a hard rule withheld it, or the app changed: worth a word on the folded card
     var noteworthy: Bool {
-        !used && ["Passwortfeld", "sichere Eingabe", "privates Fenster", "App ausgenommen", "App gewechselt"]
+        !used && ["Passwortfeld", "sichere Eingabe aktiv", "privates Fenster", "App ausgenommen", "App gewechselt"]
             .contains { label.hasSuffix($0) }
     }
 }
