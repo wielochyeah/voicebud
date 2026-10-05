@@ -157,12 +157,12 @@ struct HubIcon {
 }
 
 enum HubPane: String, CaseIterable, Identifiable {
-    case verlauf, texterkennung, woerterbuch, kuerzel, insel, welle, alcove, kontext, allgemein
+    case verlauf, texterkennung, woerterbuch, kuerzel, insel, welle, alcove, kontext, erkennung, allgemein
 
     static let top: [HubPane] = [.verlauf, .texterkennung, .woerterbuch, .kuerzel]
     /// the Alcove pane only exists when Alcove is installed
     static var settings: [HubPane] {
-        [.insel, .welle, .alcove, .kontext, .allgemein].filter { $0 != .alcove || HubSystem.alcoveInstalled() }
+        [.insel, .welle, .alcove, .kontext, .erkennung, .allgemein].filter { $0 != .alcove || HubSystem.alcoveInstalled() }
     }
 
     var id: String { rawValue }
@@ -170,7 +170,8 @@ enum HubPane: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .verlauf: return L("Verlauf")
-        case .texterkennung: return L("Texterkennung")
+        case .texterkennung: return L("Erkannte Texte")
+        case .erkennung: return L("Texterkennung")
         case .woerterbuch: return L("Wörterbuch")
         case .kuerzel: return L("Kürzel")
         case .insel: return L("Insel & Kapsel")
@@ -193,6 +194,7 @@ enum HubPane: String, CaseIterable, Identifiable {
         case .welle: return HubIcon(symbol: "waveform", top: 0xFB7185, bottom: 0xF43F5E)
         case .alcove: return HubIcon(symbol: "rectangle.2.swap", top: 0x5EEAD4, bottom: 0x14B8A6)
         case .kontext: return HubIcon(symbol: "text.viewfinder", top: 0x7DB6FF, bottom: 0x3B82F6)
+        case .erkennung: return HubIcon(symbol: "doc.text.viewfinder", top: 0xA5B4FC, bottom: 0x6366F1)
         case .allgemein: return HubIcon(symbol: "gearshape.fill", top: 0xA1A1A6, bottom: 0x76767B)
         }
     }
@@ -531,6 +533,7 @@ struct HubDetail: View {
             case .welle: HubWavePane(model: model)
             case .alcove: HubAlcovePane(model: model)
             case .kontext: HubContextPane(model: model)
+            case .erkennung: HubScreenTextPane(model: model)
             case .allgemein: HubGeneralPane(model: model)
             }
         }
@@ -1861,19 +1864,6 @@ struct HubGeneralPane: View {
                                      select: { v in model.update { $0.dictationLanguage = v } })
                     }
                 }
-                HubGroupLabel(L("Texterkennung"), top: 20)
-                HubCard {
-                    HubRow(L("Texterkennung mit ⇧⌘2"), subtitle: L("Bereich aufziehen, der Text landet in der Zwischenablage. ⌥ antippen für Formeln")) {
-                        HubSwitch(isOn: model.binding(\.screenText))
-                    }
-                    HubSeparator()
-                    HubRow(L("Erkannte Texte im Verlauf"), subtitle: L("Eigener Verlauf, getrennt von den Diktaten")) {
-                        HubSwitch(isOn: model.binding(\.screenTextHistory))
-                    }
-                }
-                if model.state.settings.screenText {
-                    HubFormulaApps(model: model)
-                }
                 HubGroupLabel(L("Verhalten"), top: 20)
                 HubCard {
                     HubRow(L("Start- und Stopp-Ton"), subtitle: L("Leiser Ton beim Drücken und beim Loslassen")) {
@@ -2724,6 +2714,39 @@ enum HubContextCopy {
     static func appName(_ bundle: String) -> String {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) else { return bundle }
         return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+    }
+}
+
+/// Texterkennung settings (05.10., Nils: out of Allgemein, into a category of their own):
+/// ⇧⌘2 on or off, its history, the formulas and what each app gets.
+struct HubScreenTextPane: View {
+    let model: HubModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HubPaneHeader(pane: .erkennung)
+            HubSettingsColumn {
+                HubCard {
+                    HubRow(L("Texterkennung mit ⇧⌘2"), subtitle: L("Bereich aufziehen, der Text landet in der Zwischenablage")) {
+                        HubSwitch(isOn: model.binding(\.screenText))
+                    }
+                    HubSeparator()
+                    HubRow(L("Erkannte Texte im Verlauf"), subtitle: L("Eigener Verlauf, getrennt von den Diktaten")) {
+                        HubSwitch(isOn: model.binding(\.screenTextHistory))
+                    }
+                }
+                if model.state.settings.screenText {
+                    HubGroupLabel(L("Formeln"), top: 20)
+                    HubCard {
+                        HubRow(L("⌥ antippen beim Aufziehen"),
+                               subtitle: L("Nach ⇧⌘2 schaltet ⌥ zwischen Text und Formeln um, die Insel zeigt, was gilt. Brüche, Hochzahlen, Wurzeln und der Text drumherum, gelesen vom lokalen Sprachmodell.")) {
+                            EmptyView()
+                        }
+                    }
+                    HubFormulaApps(model: model)
+                }
+            }
+        }
     }
 }
 

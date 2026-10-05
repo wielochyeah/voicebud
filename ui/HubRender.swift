@@ -40,6 +40,7 @@ enum HubRenderer {
         Shot(name: "alcove-ausweichen", pane: .alcove, settings: { $0.alcove = .dodge }),
         Shot(name: "kontext", pane: .kontext, settings: { $0.contextApps = ["com.apple.mail": 3] }),
         Shot(name: "kuerzel", pane: .kuerzel),
+        Shot(name: "erkennung", pane: .erkennung),
         Shot(name: "allgemein", pane: .allgemein),
     ]
 

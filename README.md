@@ -82,7 +82,9 @@ What lands on the clipboard depends on where you paste:
 - **Word:** real, editable equations.
 - **Notes, Mail and everything else:** readable characters, for example σ², √(x + 1), (a − μ)/σ.
 
-You can change this for each app, and add apps, in the hub under General, "Formulas per App".
+You can change this for each app, and add apps, in the hub under Text Recognition:
+
+![Formulas per app in the hub](docs/screenshots/hub-erkennung.png)
 
 ![A formula recognised](docs/screenshots/formula-done.jpg)
 
@@ -120,7 +122,7 @@ From 5 seconds the island counts the seconds; from 10 seconds it says so and off
 
 ### The hub
 
-History with the original transcript next to the cleaned text, the dictionary, snippets, the look of the island, screen context per app and general settings, including both languages. Open it from the microphone in the menu bar.
+History with the original transcript next to the cleaned text, recognized text, the dictionary, snippets, the look of the island, screen context per app, text recognition with formulas per app, and general settings, including both languages. Open it from the microphone in the menu bar.
 
 ![History, with the original transcript unfolded](docs/screenshots/hub-verlauf.png)
 
