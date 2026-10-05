@@ -2471,7 +2471,7 @@ struct OnboardingFinish: View {
                     Image(systemName: "text.badge.plus").font(.system(size: 15)).foregroundStyle(Color(hex: 0x22C55E))
                 }
                 HubSeparator()
-                OnboardingRow(L("Texterkennung"), subtitle: L("⇧⌘2 drücken, Bereich aufziehen, ⌥ für Formeln.")) {
+                OnboardingRow(L("Texterkennung"), subtitle: L("⇧⌘2 drücken, für Formeln ⌥ antippen, aufziehen.")) {
                     Image(systemName: "text.viewfinder").font(.system(size: 15)).foregroundStyle(Color(hex: 0x3E92F0))
                 }
                 HubSeparator()

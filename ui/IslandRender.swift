@@ -137,7 +137,7 @@ enum IslandRenderer {
             },
             Scene(name: "ocr-formel-erkannt") { _, m in
                 m.phase = .done; m.mode = .ocr
-                m.done = DoneInfo(app: "Formel erkannt", words: 12, seconds: 1.6,
+                m.done = DoneInfo(app: "Formel erkannt", words: 9, seconds: 1.6,
                                   preview: "zₐ = (a − μ)/σ, P(X < a) = Φ(zₐ), R ∼ N(μ, σ²)", toClipboard: true)
             },
             Scene(name: "kompakt-recording-fein") { s, m in m.phase = .recording; s.settings.waveStyle = .fein },

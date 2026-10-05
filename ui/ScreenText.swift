@@ -12,6 +12,7 @@
 // text around them. The clipboard gets LaTeX for chat apps, browsers and editors, real equations
 // (MathML) for Word, and readable characters (σ², √(x + 1)) for everything else.
 import AppKit
+import SwiftUI
 import Carbon
 
 @MainActor
@@ -224,7 +225,7 @@ final class ScreenText {
     private func captured(_ path: URL) {
         capture = nil
         selecting = false
-        let asFormula = formula || NSEvent.modifierFlags.contains(.option)
+        let asFormula = formula || (!dictationBusy && NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask) == .option)
         stopWatchingOption()
         IPC.island?.excludeFromCapture(false)
         guard FileManager.default.fileExists(atPath: path.path) else {
@@ -303,7 +304,8 @@ final class ScreenText {
                            "message": reply == nil ? "Formelerkennung hat nicht geantwortet" : "Kein Text gefunden"])
                 return
             }
-            let words = plain.split(whereSeparator: \.isWhitespace).count
+            // like the plain recognition and the history: "=", "−" and "<" are no words
+            let words = plain.split(whereSeparator: \.isWhitespace).filter { $0.contains { $0.isLetter || $0.isNumber } }.count
             IPC.log("screen text: formula read, \(plain.count) chars in \(String(format: "%.1f", Date().timeIntervalSince(t0))) s")
             self.hold(Result(text: plain, words: words, seconds: Date().timeIntervalSince(t0),
                              formula: (markdown, plain, html)), dictation: dictation)
@@ -360,12 +362,14 @@ final class ScreenText {
     }
 
     /// any press of ⌥ while choosing turns formulas on, and they stay on (05.10., Nils: a toggle
-    /// ended "off" after several taps; Esc is the way out, as always)
+    /// ended "off" after several taps; Esc is the way out, as always). ⌥ alone: ⌃⌥ is the prompt
+    /// hotkey, and a take may start while the crosshair is out
     private func pollOption() {
         guard selecting else { return stopWatchingOption() }
-        guard !formula, NSEvent.modifierFlags.contains(.option) else { return }
+        guard !formula, !dictationBusy,
+              NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask) == .option else { return }
         formula = true
-        state.ocrFormula = true
+        withAnimation(IslandMotion.swap) { state.ocrFormula = true }      // the capsule glides narrower
         IPC.send(["type": "formula_warm"])              // the model loads while the user drags
         IPC.log("screen text: formulas on")
     }
@@ -376,7 +380,8 @@ final class ScreenText {
             : r.tables > 0 ? (r.tables == 1 ? "Tabelle erkannt" : "\(r.tables) Tabellen erkannt") : ""
         show(["type": "state", "phase": "done", "mode": "ocr", "app": label,
               "words": r.words, "seconds": r.seconds,
-              "preview": Self.preview(Self.withoutTableSyntax(r.text)), "target": "clipboard", "text": r.text])
+              "preview": Self.preview(r.formula != nil ? r.text : Self.withoutTableSyntax(r.text)),   // |a| is no table
+              "target": "clipboard", "text": r.text])
     }
 
     /// IPC: a state of the core's own (a dictation): remembered while a recognition runs, and the
@@ -462,7 +467,9 @@ final class ScreenText {
     /// Formulas: where LaTeX is understood or kept (chat apps, browsers with ChatGPT, Claude,
     /// Overleaf or Notion, editors and terminals, Markdown notes) the clipboard holds the Markdown
     /// with LaTeX; Word gets real equations; every other app readable characters
-    static let latexApps: Set<String> = plainOnly.union(lineApps).union([
+    static let latexApps: Set<String> = lineApps.union([
+        // AI chats render LaTeX; the messengers of plainOnly do not, they get readable characters
+        "com.anthropic.claudefordesktop", "com.openai.chat", "com.openai.codex", "ai.perplexity.mac",
         "com.apple.Safari", "com.apple.SafariTechnologyPreview", "com.google.Chrome", "com.google.Chrome.canary",
         "company.thebrowser.Browser", "company.thebrowser.dia", "org.mozilla.firefox", "com.microsoft.edgemac",
         "com.brave.Browser", "com.kagi.kagimacOS", "com.vivaldi.Vivaldi", "com.operasoftware.Opera",

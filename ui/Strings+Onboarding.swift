@@ -201,7 +201,7 @@ extension Loc {
         "Verbesserte Wörter merkt sich VoiceBud.": "VoiceBud remembers the words you correct.",
         "Kürzel": "Snippets",
         "Aus „meine Signatur“ wird der ganze Text.": "“My signature” turns into the full text.",
-        "⇧⌘2 drücken, Bereich aufziehen, ⌥ für Formeln.": "Press ⇧⌘2 and drag over an area, tap ⌥ for formulas.",
+        "⇧⌘2 drücken, für Formeln ⌥ antippen, aufziehen.": "Press ⇧⌘2, tap ⌥ for formulas, then drag.",
         "Verlauf und Einstellungen": "History and settings",
         "Klick auf das Mikrofon in der Menüleiste.": "Click the microphone in the menu bar.",
     ]

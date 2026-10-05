@@ -12,16 +12,11 @@ No cloud, no subscription. Everything runs on your machine.
 
 # Install Python 3.12 (the version this project uses)
 brew install python@3.12
-
-# Install Ollama (runs the local LLM that cleans up your transcripts)
-brew install ollama
-
-# Start the Ollama server (leave it running; or open the Ollama.app which does this for you)
-ollama serve &
-
-# Download the LLM used for transcript cleanup (~2.5 GB, one time)
-ollama pull qwen3:4b-instruct
 ```
+
+Both models run through MLX inside the app: Whisper large-v3-turbo for speech and
+`mlx-community/Qwen3.5-4B-MLX-4bit` (~3 GB) for the cleanup, prompts, commands and formulas.
+The setup window downloads them on the first start; after that VoiceBud needs no internet.
 
 ## 2. Set up the project
 
@@ -73,7 +68,7 @@ Click into any text field (Notes, browser, Slack, anywhere):
 
 - **Hotkey**: `hotkey.key` (e.g. `alt_r`, `ctrl+alt`) — `fn` is not possible on macOS
 - **Hold vs toggle**: `hotkey.mode: hold | toggle`
-- **LLM**: `llm.model` — one line to swap (avoid plain `qwen3:4b`: it's the slow "thinking" variant; use `qwen3:4b-instruct`)
+- **LLM**: `llm.model` — another mlx-community repo works too (download it once, restart); the formula reader needs a Qwen3.5 checkpoint with its vision part
 - **Accuracy vs speed**: `stt.model: tiny.en | base | small | medium | large-v3`
 
 ## Optional: start automatically at login
