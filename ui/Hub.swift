@@ -1644,7 +1644,26 @@ struct HubIslandPane: View {
                 }
                 HubFootnote(note(shape, liveText: s.liveText))
                     .transaction { $0.animation = nil }
+                HubGroupLabel("Menüleisten-Symbol beim Aufnehmen", top: 20)
+                HubCard {
+                    HubTilePicker(options: [(.schlicht, "Schlicht"), (.farbe, "Farbe"), (.punkt, "Roter Punkt"), (.zeit, "Zeit")],
+                                  selection: s.menuBarStyle,
+                                  select: { v in model.update { $0.menuBarStyle = v } }) { style in
+                        HubMenuBarTile(style: style)
+                    }
+                }
+                HubFootnote(menuBarNote(s.menuBarStyle))
+                    .transaction { $0.animation = nil }
             }
+        }
+    }
+
+    private func menuBarNote(_ style: MenuBarStyle) -> String {
+        switch style {
+        case .schlicht: return "Das Symbol bleibt immer gleich. Dass aufgenommen wird, zeigt der orange Punkt von macOS neben dem Kontrollzentrum."
+        case .farbe: return "Das Mikrofon färbt sich in der Farbe des Modus: Diktat violett, Prompt türkis, Befehl bernstein. Bei stummem Ton steht ein durchgestrichener Lautsprecher daneben."
+        case .punkt: return "Das Mikrofon bekommt einen kleinen roten Aufnahmepunkt, wie bei Bildschirmaufnahmen. Bei stummem Ton steht ein durchgestrichener Lautsprecher daneben."
+        case .zeit: return "Das Symbol wird zur Kapsel mit laufender Zeit. Am auffälligsten, braucht aber mehr Platz in der Menüleiste."
         }
     }
 
@@ -1662,6 +1681,47 @@ struct HubIslandPane: View {
             live = "Mit Live-Text klappt sie beim Sprechen auf und zeigt mit, was ankommt."
         }
         return base + " " + live
+    }
+}
+
+/// A slice of the menu bar while dictating, in the chosen look (light or dark like the hub).
+struct HubMenuBarTile: View {
+    let style: MenuBarStyle
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let dark = scheme == .dark
+        let ink = dark ? Color.white.opacity(0.92) : Color.black.opacity(0.82)
+        let violet = Color(hex: 0x8F6CF2)
+        ZStack {
+            (dark ? Color(white: 0.17) : Color(white: 0.93))
+            HStack(spacing: 9) {
+                switch style {
+                case .schlicht:
+                    Image(systemName: "mic.fill").foregroundStyle(ink)
+                case .farbe:
+                    Image(systemName: "mic.fill").foregroundStyle(violet)
+                case .punkt:
+                    Image(systemName: "mic.fill").foregroundStyle(ink)
+                        .overlay(alignment: .topTrailing) {
+                            Circle().fill(Color(hex: 0xFF3B30)).frame(width: 5, height: 5).offset(x: 3, y: -1)
+                        }
+                case .zeit:
+                    HStack(spacing: 3) {
+                        Image(systemName: "mic.fill").font(.system(size: 8.5, weight: .semibold))
+                        Text("0:42").font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .frame(height: 16)
+                    .background(Capsule().fill(violet))
+                }
+                // macOS's own sign that the microphone is on, next to the Control Centre
+                Circle().fill(Color.orange).frame(width: 5, height: 5)
+                Text("9:41").foregroundStyle(ink)
+            }
+            .font(.system(size: 11.5, weight: .medium))
+        }
     }
 }
 

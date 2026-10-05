@@ -139,14 +139,9 @@ final class CoreAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func buildStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        if let button = item.button {
-            let image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "VoiceBud")
-            image?.isTemplate = true
-            button.image = image
-            button.toolTip = "VoiceBud"
-        }
         item.menu = menu
         statusItem = item
+        MenuBarIcon.shared = MenuBarIcon(item: item, state: state)   // the symbol and how it shows a recording
     }
 
     private func buildMenu() {

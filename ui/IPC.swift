@@ -275,6 +275,7 @@ enum IPC {
         }
         state.phase = phase
         island?.phaseDidChange()
+        MenuBarIcon.shared?.update()
         if msg["mode"] as? String != "ocr" {
             ScreenText.shared?.coreState(phase, toClipboard: state.done?.toClipboard ?? false)
         }
@@ -303,6 +304,7 @@ extension AppState {
             IPC.send(["type": "settings_changed"])
             IPC.island?.settingsDidChange()
             ScreenText.shared?.settingsDidChange()
+            MenuBarIcon.shared?.update()
         }
     }
 

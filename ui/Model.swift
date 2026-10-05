@@ -10,6 +10,8 @@ enum Mode: String, Codable { case dictate, prompt, command, ocr }
 enum IslandStyle: String, Codable, CaseIterable { case kompakt, live, kapsel, insel }
 enum WaveStyle: String, Codable, CaseIterable { case fein, sym, linie }
 enum AlcoveMode: String, Codable, CaseIterable { case auto, dodge, takeover }
+/// the menu bar symbol while recording (MenuBarIcon.swift); "schlicht" is the plain microphone
+enum MenuBarStyle: String, Codable, CaseIterable { case schlicht, farbe, punkt, zeit }
 
 /// What the confirmation shows about the screen context of a take (done message "context").
 /// Never the context itself: labels, counts and the names used.
@@ -101,11 +103,13 @@ struct UISettings: Codable, Equatable {
     /// output muted while recording, except when one of these apps is in front or plays sound
     var muteWhileRecording: Bool = true
     var muteExceptions: [String] = ["com.microsoft.teams2", "com.microsoft.teams", "us.zoom.xos", "com.apple.FaceTime"]
+    /// how the menu bar symbol shows a recording (05.10.: Schlicht, Farbe, Roter Punkt, Zeit)
+    var menuBarStyle: MenuBarStyle = .schlicht
 
     enum CodingKeys: String, CodingKey {
         case islandStyle, waveStyle, waveLive, alcove, confirmSeconds, sounds, hideInFullscreen, screenText, screenTextHistory,
              keepModelsLoaded, liveText, confirmHoverExpand, contextLevel, contextApps, contextElectron,
-             onboardingDone, muteWhileRecording, muteExceptions
+             onboardingDone, muteWhileRecording, muteExceptions, menuBarStyle
     }
 
     init() {}
@@ -135,6 +139,7 @@ struct UISettings: Codable, Equatable {
         onboardingDone = (try? c.decodeIfPresent(Bool.self, forKey: .onboardingDone)) ?? d.onboardingDone
         muteWhileRecording = (try? c.decodeIfPresent(Bool.self, forKey: .muteWhileRecording)) ?? d.muteWhileRecording
         muteExceptions = (try? c.decodeIfPresent([String].self, forKey: .muteExceptions)) ?? d.muteExceptions
+        menuBarStyle = (try? c.decodeIfPresent(MenuBarStyle.self, forKey: .menuBarStyle)) ?? d.menuBarStyle
     }
 
     /// Writes only the SPEC §0 vocabulary: "insel" | "kapsel" plus `liveText`.
@@ -158,6 +163,7 @@ struct UISettings: Codable, Equatable {
         try c.encode(onboardingDone, forKey: .onboardingDone)
         try c.encode(muteWhileRecording, forKey: .muteWhileRecording)
         try c.encode(muteExceptions, forKey: .muteExceptions)
+        try c.encode(menuBarStyle, forKey: .menuBarStyle)
     }
 
     static func load() -> UISettings {

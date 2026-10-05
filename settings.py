@@ -25,6 +25,7 @@ DEFAULTS = {
     "muteExceptions": ["com.microsoft.teams2", "com.microsoft.teams", "us.zoom.xos", "com.apple.FaceTime"],
     "screenText": True,          # Texterkennung with ⇧⌘2 (the UI owns the shortcut)
     "screenTextHistory": True,   # recognised texts in their own history (mode "ocr")
+    "menuBarStyle": "schlicht",  # menu bar symbol while recording: schlicht | farbe | punkt | zeit (UI only)
 }
 
 

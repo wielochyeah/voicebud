@@ -7,7 +7,11 @@ import CoreAudio
 
 @MainActor
 enum OutputMute {
-    private static var muted: (device: AudioObjectID, before: UInt32)?
+    private static var muted: (device: AudioObjectID, before: UInt32)? {
+        didSet { if (oldValue == nil) != (muted == nil) { MenuBarIcon.shared?.update() } }
+    }
+    /// the sound is off for the running take (the menu bar symbol shows it)
+    static var isMuted: Bool { muted != nil }
     private static var pending: DispatchWorkItem?
     private static var marker: URL { Paths.dataDir.appendingPathComponent("muted-by-voicebud") }
 
