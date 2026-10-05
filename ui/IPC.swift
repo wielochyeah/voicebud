@@ -302,6 +302,7 @@ extension AppState {
     /// tells Python, and lets the island re-layout. Safe from any thread.
     func commitSettings() {
         IPC.onMain { [self] in
+            Loc.shared.apply(settings.uiLanguage)
             settings.save()
             IPC.send(["type": "settings_changed"])
             IPC.island?.settingsDidChange()

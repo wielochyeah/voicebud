@@ -110,6 +110,7 @@ final class CoreAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let icon = Self.appIcon() { NSApp.applicationIconImage = icon }
 
         state = AppState()
+        Loc.shared.apply(state.settings.uiLanguage)       // the app's language before the first text
         island = IslandController(state: state)
         OnboardingBridge.install(state: state)
         OutputMute.recoverAfterCrash()
