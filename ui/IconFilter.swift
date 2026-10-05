@@ -61,6 +61,10 @@ final class IconFilter {
     let on: Bool
     /// medWord comes from real words of the picture (else it is a guess and the height rule is off)
     var measured = false
+    /// a code editor or terminal (the region read line by line): coloured keywords at a line's
+    /// start ("if", "fn", git's "M") are words there, not icons. Elsewhere a coloured letter is an
+    /// icon as before (a green ✓ read as "v", a ⚠ as "A", the Google "G"; verified 05.10.)
+    var code = false
     var medWord = 1.0, textChroma = 0.0, hasCJK = false
     var cache: [CGRect: (runs: [InkRun], lineH: Int)] = [:]
 
@@ -105,7 +109,7 @@ final class IconFilter {
 
     /// an icon glyph in front of the words of a line
     func lead(_ tok: String, _ box: CGRect) -> Bool {
-        guard tok.count <= 2, !Self.isEnumerator(tok) else { return false }
+        guard tok.count <= 2, !Self.isEnumerator(tok), !tok.contains(where: \.isNumber) else { return false }
         let (rs, lh) = runs(box)
         guard rs.count >= 2, lh > 0 else { return false }
         let r0 = rs[0]
@@ -115,9 +119,11 @@ final class IconFilter {
         // a coloured first word is an icon only when it is not a word: Xcode colours "if", "fn",
         // "do", git colours "M" (review 05.10.: they were dropped); a coloured icon of word size
         // read as letters stays, as before the filter
-        if r0.chroma >= 60 && rest <= 30 && (!tok.allSatisfy(\.isLetter) || h0 >= 1.1) { return true }
+        // (in code the i-dot of "if" makes it 1.13 word heights: icons there are clearly taller)
+        if r0.chroma >= 60 && rest <= 30 && (!code || !tok.allSatisfy(\.isLetter) || h0 >= 1.4) { return true }
         let gap = Double(rs[1].x0 - r0.x1) / Double(lh)
-        return h0 >= 1.1 && w0 >= 1.1 && gap >= 0.45
+        // (in code a keyword before a space looks the same: there only a clearly taller glyph)
+        return h0 >= (code && tok.allSatisfy(\.isLetter) ? 1.4 : 1.1) && w0 >= 1.1 && gap >= 0.45
     }
 
     /// a line that is nothing but an icon glyph
@@ -131,7 +137,7 @@ final class IconFilter {
         guard let f = rs.first else { return false }
         let u = rs.dropFirst().reduce(f) { InkRun(x0: min($0.x0, $1.x0), x1: max($0.x1, $1.x1), y0: min($0.y0, $1.y0), y1: max($0.y1, $1.y1), chroma: max($0.chroma, $1.chroma)) }
         let height = Double(u.y1 - u.y0) / medWord
-        if u.chroma >= 60 && textChroma <= 30 && (!tok.allSatisfy(\.isLetter) || (measured && height >= 1.1)) { return true }
+        if u.chroma >= 60 && textChroma <= 30 && (!code || !tok.allSatisfy(\.isLetter) || (measured && height >= 1.4)) { return true }
         // the height rule needs a measured word height: a picture of just "Ja" or "OK" has none,
         // and every glyph then looked twice too tall (review 05.10.: "Kein Text gefunden")
         return measured && height >= 1.8
@@ -172,9 +178,10 @@ final class IconFilter {
     }
 
     /// the classic recogniser's lines (single-line path, macOS 15)
-    static func cleanLines(_ lines: [OCRHelper.Line], _ img: CGImage) -> [OCRHelper.Line] {
+    static func cleanLines(_ lines: [OCRHelper.Line], _ img: CGImage, code: Bool = false) -> [OCRHelper.Line] {
         guard !lines.isEmpty else { return lines }
         let f = IconFilter(img, boxes: lines.map(\.box), transcripts: lines.map(\.text), on: true)
+        f.code = code
         let t0 = Date()
         defer { OCRHelper.iconMs += Int(Date().timeIntervalSince(t0) * 1000) }
         return lines.compactMap { l in

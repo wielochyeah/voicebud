@@ -206,7 +206,7 @@ enum OCRHelper {
         if keepLines {
             // Terminal and code editors: no paragraphs (Apple's would join lines of code and
             // output, 04.10., Nils), every line as on screen
-            page = monoPage(IconFilter.cleanLines(classicLines(img), img))
+            page = monoPage(IconFilter.cleanLines(classicLines(img), img, code: true))
         } else if #available(macOS 26.0, *) {
             // the document request (paragraphs, lists, tables, reading order) starts at once; the
             // classic recogniser (TextShot's engine, faster) runs alongside and answers a single

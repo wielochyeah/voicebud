@@ -248,6 +248,7 @@ class VoiceBud:
         self._busy_lock = threading.Lock()
         self._perm_warned = False
         self._spec_llm = {}    # seq -> the cleanup computed ahead in a speech pause (see _speculate_llm)
+        self._spec_waiting = {}  # seq -> the ticket of that cleanup while the take waits for it
         self._processing = {}  # seq -> (monotonic time the take stopped, mode, seconds until "Dauert länger")
         self._raw = {}         # seq -> transcript, once known (a cancel puts it on the clipboard)
         self._shown_seq = None   # the take whose processing the island shows
@@ -604,7 +605,12 @@ class VoiceBud:
         if entry["key"] != key:
             self.cleaner.cancel(ticket)
             return None
-        if not ticket["done"].wait(timeout) or ticket.get("cancelled") or not ticket.get("ran"):
+        self._spec_waiting[seq] = ticket       # a cancel of this take stops it (see _cancel_slow)
+        try:
+            done = ticket["done"].wait(timeout)
+        finally:
+            self._spec_waiting.pop(seq, None)
+        if not done or ticket.get("cancelled") or not ticket.get("ran"):
             return None                   # it never reached the model (short, not loaded): run normally
         self.cleaner.last_stats = dict(ticket.get("stats", {}), speculative=True)
         return ticket.get("result")
@@ -682,14 +688,17 @@ class VoiceBud:
             gone = sorted(s for s in self._processing if s <= seq)
             self._cancelled.update(gone)
         mode = entry[1]
-        raw = self._raw.get(seq)
+        # every cancelled take's transcript, oldest first (one queued ahead is not lost either)
+        raw = "\n\n".join(r for r in (self._raw.get(s) for s in gone) if r)
         print(f"take {seq} cancelled by the user after {time.monotonic() - entry[0]:.0f} s"
               + (f" (with {len(gone) - 1} queued ahead)" if len(gone) > 1 else ""))
         for s in gone:
             self.cleaner.cancel_take(s)
-            spec = self._spec_llm.get(s)       # a cleanup computed ahead that the take waits for
-            if spec is not None:
-                self.cleaner.cancel(spec["ticket"])
+            # a cleanup computed ahead: still pending, or the one the take is waiting for
+            spec = self._spec_llm.get(s)
+            ticket = self._spec_waiting.get(s) or (spec["ticket"] if spec is not None else None)
+            if ticket is not None:
+                self.cleaner.cancel(ticket)
         message = "Abgebrochen, nichts eingefügt"
         if raw:
             try:

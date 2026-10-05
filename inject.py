@@ -34,19 +34,19 @@ def _get_clipboard():
 
 
 def _save_clipboard():
-    """Every item with every type (an image, files, rich text), not only the plain text: a paste
-    must not lose what was on the clipboard (review 05.10.: an image was gone after a dictation)."""
+    """What comes back after the paste. The text, as always: asking for every type would make
+    apps that render on request (Office, Keynote) produce each format first, before the paste
+    (review 05.10.: 0.4 s per format). Only a clipboard without text keeps its picture (a
+    screenshot was lost after a dictation)."""
     pb = NSPasteboard.generalPasteboard()
-    saved = []
-    for item in pb.pasteboardItems() or []:
-        types = {}
-        for t in item.types() or []:
-            data = item.dataForType_(t)
-            if data is not None:
-                types[t] = data
-        if types:
-            saved.append(types)
-    return saved
+    text = pb.stringForType_(NSPasteboardTypeString)
+    if text is not None:
+        return [{NSPasteboardTypeString: text}]
+    for t in ("public.png", "public.tiff"):
+        data = pb.dataForType_(t)
+        if data is not None:
+            return [{t: data}]
+    return []
 
 
 def _restore_clipboard(saved):
@@ -55,8 +55,11 @@ def _restore_clipboard(saved):
     items = []
     for types in saved:
         item = NSPasteboardItem.alloc().init()
-        for t, data in types.items():
-            item.setData_forType_(data, t)
+        for t, value in types.items():
+            if isinstance(value, str):
+                item.setString_forType_(value, t)
+            else:
+                item.setData_forType_(value, t)
         if TRANSIENT not in types:
             item.setString_forType_("", TRANSIENT)   # the user's own content back: no new history entry
         items.append(item)
