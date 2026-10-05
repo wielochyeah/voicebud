@@ -105,12 +105,17 @@ enum OCRHelper {
             if ink, start == nil { start = y }
             if !ink, let s = start { bands.append((s, y)); start = nil }
         }
-        let inner = bands.filter { $0.start > 0 && $0.end < h }.map { $0.end - $0.start }.sorted()
+        let innerBands = bands.filter { $0.start > 0 && $0.end < h }
+        let inner = innerBands.map { $0.end - $0.start }.sorted()
         guard bands.count >= 2, !inner.isEmpty else { return img }
         let line = Double(inner[inner.count / 2])
-        /// low, and its edge row holds at least half the ink of its densest row
+        /// a strip, not a line: lower than half a line and its edge row dense with cut strokes.
+        /// (05.10. review: at 0.75 of the height intact lines without ascenders, caps headings and
+        /// serif fonts went too, 238 of 517 test lines. At 0.5 none: an intact line without
+        /// ascenders is 0.58 of one even in Times; what still goes are i-dots, slivers and lines
+        /// clipped so far that Vision read nothing or garbage from them before.)
         func cut(_ b: (start: Int, end: Int), edge: Int) -> Bool {
-            guard Double(b.end - b.start) < 0.75 * line else { return false }
+            guard Double(b.end - b.start) < 0.5 * line else { return false }
             let densest = count[b.start..<b.end].max() ?? 0
             return densest > 0 && Double(count[edge]) >= 0.5 * Double(densest)
         }

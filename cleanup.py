@@ -23,9 +23,15 @@ import guards
 
 # -- command mode (05.10. challenge) -------------------------------------------------------------
 _QUOTES = "\"„“”«»'‚‘’"
-_TRANSLATE = re.compile(r"übersetz|translat|auf (deutsch|englisch)|ins (deutsche|englische)|"
-                        r"in(to)? (english|german)|\b(englisch|deutsch|english|german)\b", re.I)
-_META = re.compile(r"\bnicht (im (markierten |obigen |vorliegenden )?Text )?(angegeben|enthalten|erwähnt|genannt)\b|"
+# an instruction that names a language asks for that language (also "eine englische Version",
+# "auf Spanisch"): then a changed language is the point, not a flip
+_TRANSLATE = re.compile(r"übersetz|translat|\b(deutsch|englisch|französisch|spanisch|italienisch|portugiesisch|"
+                        r"niederländisch|polnisch|türkisch|russisch|ukrainisch|chinesisch|japanisch|arabisch)\w*|"
+                        r"\b(english|german|french|spanish|italian|portuguese|dutch|polish|turkish|russian|"
+                        r"ukrainian|chinese|japanese|arabic)\b", re.I)
+_META = re.compile(r"\bnicht im (markierten |obigen |vorliegenden )?Text (angegeben|enthalten|erwähnt|genannt)\b|"
+                   r"\bim (markierten |obigen |vorliegenden )?Text (wird |ist |werden |sind )?(nicht|keine?[nrs]?)( \w+){0,3} "
+                   r"(angegeben|enthalten|erwähnt|genannt)\b|"
                    r"\bnot (mentioned|specified|stated|included) in the (selected |given )?text\b|"
                    r"\bthe (selected |given )?text (does not|doesn't) (contain|mention|say)\b|"
                    r"\b(Der|Im) (markierte |obige |vorliegende )?Text enthält (lediglich|nur|keine)\b", re.I)
@@ -35,10 +41,15 @@ _EN_WORDS = set("the and is not i we you a an with for on to in please of it be 
 
 
 def _text_lang(text):
-    """German or English by their commonest small words (None: too short to tell)."""
+    """German or English by their commonest small words; None when too short to tell or mixed
+    (a German note quoting an English mail is neither)."""
     words = re.findall(r"[a-zäöüß]+", text.lower())
     de, en = sum(w in _DE_WORDS for w in words), sum(w in _EN_WORDS for w in words)
-    return "de" if de > en else "en" if en > de else None
+    if de >= 2 and en * 4 <= de:
+        return "de"
+    if en >= 2 and de * 4 <= en:
+        return "en"
+    return None
 
 
 def _tidy_command(out, selection):

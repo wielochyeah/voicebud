@@ -146,6 +146,16 @@ class CommandTidyTest(unittest.TestCase):
         self.assertFalse(cleanup._META.search("Der Text beschreibt die Quartalszahlen."))   # a summary stays
         self.assertTrue(cleanup._TRANSLATE.search("übersetz das ins Englische"))
         self.assertFalse(cleanup._TRANSLATE.search("mach das förmlicher"))
+        for asks in ("mach eine englische Version daraus", "schreib das als englische Mail", "die deutsche Fassung bitte",
+                     "auf Spanisch bitte", "mach das auf französisch", "in French please"):
+            self.assertTrue(cleanup._TRANSLATE.search(asks), asks)
+        # review 05.10.: an ordinary sentence with "nicht enthalten" is no answer about the text
+        self.assertFalse(cleanup._META.search("Die Anfahrt ist im Preis nicht enthalten."))
+        self.assertFalse(cleanup._META.search("| Lieferzeit | nicht angegeben |"))
+        self.assertTrue(cleanup._META.search("Im Text wird kein Datum genannt."))
+        # a German note quoting an English mail is neither language: no retry
+        self.assertIsNone(cleanup._text_lang("Kurz zur Info für dich, der Kunde hat mir das geschrieben und ich wollte "
+                                             "es dir noch zeigen: Thanks for the update, we will review it and get back to you."))
 
 if __name__ == "__main__":
     unittest.main()
