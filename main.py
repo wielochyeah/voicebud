@@ -1134,7 +1134,8 @@ def main():
     key = cfg["hotkey"]["key"]
     mode = cfg["hotkey"].get("mode", "hold")
     vb.ptts["dictate"] = PushToTalk(key, lambda: vb.start_rec("dictate"), lambda: vb.stop_rec("dictate"),
-               active=lambda: vb.owner == "dictate", on_cancel=lambda: vb.cancel_rec("dictate"), mode=mode).start()
+               active=lambda: vb.owner == "dictate", on_cancel=lambda: vb.cancel_rec("dictate"), mode=mode,
+               on_chord=vb.ui.prepare).start()
     action = "Press" if mode == "toggle" else "Hold"
     print(f"{APP_NAME} ready. {action} [{key}] to dictate ({mode} mode).")
 
@@ -1143,7 +1144,7 @@ def main():
         pmode = pcfg.get("mode", "hold")
         vb.ptts["prompt"] = PushToTalk(pcfg["key"], lambda: vb.start_rec("prompt"), lambda: vb.stop_rec("prompt"),
                active=lambda: vb.owner == "prompt", on_cancel=lambda: vb.cancel_rec("prompt"),
-                   mode=pmode).start()
+                   mode=pmode, on_chord=vb.ui.prepare).start()
         paction = "Press" if pmode == "toggle" else "Hold"
         print(f"{paction} [{pcfg['key']}] to turn speech into a structured AI prompt.")
 
@@ -1152,7 +1153,7 @@ def main():
         cmode = ccfg.get("mode", "hold")
         vb.ptts["command"] = PushToTalk(ccfg["key"], lambda: vb.start_rec("command"), lambda: vb.stop_rec("command"),
                active=lambda: vb.owner == "command", on_cancel=lambda: vb.cancel_rec("command"),
-                   mode=cmode).start()
+                   mode=cmode, on_chord=vb.ui.prepare).start()
         print(f"{'Press' if cmode == 'toggle' else 'Hold'} [{ccfg['key']}] over selected text to edit it by voice.")
 
     # SIGTERM from the app launcher / Ctrl+C: shut the UI child down cleanly, too

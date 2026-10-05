@@ -147,6 +147,10 @@ class UIBridge:
     def history_changed(self):
         self.send({"type": "history_changed"})
 
+    def prepare(self):
+        """A toggle chord went down: the take starts on its release (island looks at Alcove)."""
+        self.send({"type": "prepare"})
+
     def _writer(self):
         while True:
             msg = self._queue.get()

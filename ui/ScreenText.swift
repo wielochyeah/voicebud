@@ -36,6 +36,9 @@ final class ScreenText {
     private var source: NSRunningApplication?  // the app in front when ⇧⌘2 was pressed (for the history)
     private var askedForPermission = false
     private var accessConfirmed = false
+    /// the crosshair is out (from the press to the end of the selection)
+    private var selecting = false
+    private var hintShown = false
     /// a dictation recorded since this ⇧⌘2, and whether its text went to the clipboard
     private var dictationSince = false
     private var dictationOnClipboard = false
@@ -134,9 +137,20 @@ final class ScreenText {
         source = NSWorkspace.shared.frontmostApplication
         ensureHelper()
         send(["op": "warm"])                          // the models load while the user drags
-        // "Bereich wählen" in the notch or the capsule, left out of the picture
+        // "Bereich wählen" in the notch or the capsule, left out of the picture. With Alcove on
+        // "Automatisch" which of the two depends on what Alcove shows: VoiceBud looks first, while
+        // screencapture's crosshair starts up, and shows the hint at the latest after 0.2 s
+        // (05.10.: after a pause the old guess kept the capsule for 1-2 s)
         IPC.island?.excludeFromCapture(true)
-        show(["type": "state", "phase": "recording", "mode": "ocr"])
+        selecting = true
+        hintShown = false
+        if IPC.island?.prepare(then: { [weak self] in self?.showHint() }) == true {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                MainActor.assumeIsolated { self?.showHint() }
+            }
+        } else {
+            showHint()
+        }
         let path = FileManager.default.temporaryDirectory
             .appendingPathComponent("voicebud-ocr-\(UUID().uuidString).png")
         let capture = Process()
@@ -150,9 +164,18 @@ final class ScreenText {
             self.capture = capture
         } catch {
             busy = false
+            selecting = false
             IPC.island?.excludeFromCapture(false)
             show(["type": "state", "phase": "error", "mode": "ocr", "message": "Bildschirmauswahl nicht verfügbar"])
         }
+    }
+
+    /// once per press, and only while the crosshair is still out
+    private func showHint() {
+        // (a dictation that started meanwhile keeps its island)
+        guard selecting, busy, !hintShown, !dictationBusy else { return }
+        hintShown = true
+        show(["type": "state", "phase": "recording", "mode": "ocr"])
     }
 
     /// the UI's own answer is the one from its launch; a fresh process sees a permission granted
@@ -176,6 +199,7 @@ final class ScreenText {
 
     private func captured(_ path: URL) {
         capture = nil
+        selecting = false
         IPC.island?.excludeFromCapture(false)
         guard FileManager.default.fileExists(atPath: path.path) else {
             busy = false                                // Esc: nothing chosen, the island closes quietly

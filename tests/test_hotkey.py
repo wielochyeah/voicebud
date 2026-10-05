@@ -150,6 +150,33 @@ class ChordTest(unittest.TestCase):
         self.assertEqual(self.calls, ["start"])
         self.assertEqual(self.owner, "x")
 
+    def test_chord_down_announces_a_start(self):
+        # 05.10.: the island looks at Alcove while the keys are down; only for a press that will
+        # start a take, and a failing look never touches the hotkey
+        p = self.make()
+        seen = []
+        p.on_chord_cb = lambda: seen.append("chord")
+        self.flags(p, CTRL, CTRL | SHIFT)
+        self.assertEqual(seen, ["chord"])
+        self.assertEqual(self.calls, [])                        # nothing starts before the release
+        self.flags(p, CTRL, 0)
+        self.assertEqual(self.calls, ["start"])
+        self.flags(p, CTRL, CTRL | SHIFT, CTRL, 0)              # this press stops: no announcement
+        self.assertEqual(seen, ["chord"])
+        self.assertEqual(self.calls, ["start", "stop"])
+
+        def broken():
+            raise RuntimeError("island gone")
+        p.on_chord_cb = broken
+        self.flags(p, CTRL, CTRL | SHIFT, CTRL, 0)
+        self.assertEqual(self.calls, ["start", "stop", "start"])
+
+    def test_hold_chord_announces_before_the_start(self):
+        p = self.make("ctrl+cmd", mode="hold")
+        p.on_chord_cb = lambda: self.calls.append("chord")
+        self.flags(p, CTRL, CTRL | CMD, CTRL, 0)
+        self.assertEqual(self.calls, ["chord", "start", "stop"])
+
     def test_hold_mode_cancel_and_release(self):
         p = self.make("ctrl+cmd", mode="hold")
         self.flags(p, CTRL, CTRL | CMD)

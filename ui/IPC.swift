@@ -195,6 +195,8 @@ enum IPC {
             guard state.phase == .recording || state.phase == .processing,
                   let text = msg["text"] as? String else { return }
             if text != state.partialText { state.partialText = text }
+        case "prepare":
+            island?.prepare()                      // a take is about to start (AlcoveSight)
         case "history_changed":
             state.historyVersion += 1
             hub?.historyDidChange()

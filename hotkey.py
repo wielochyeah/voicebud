@@ -55,7 +55,7 @@ def _own_event(event):
 
 
 class PushToTalk:
-    def __init__(self, key_name, on_press, on_release, mode="hold", active=None, on_cancel=None):
+    def __init__(self, key_name, on_press, on_release, mode="hold", active=None, on_cancel=None, on_chord=None):
         names = [n.strip() for n in key_name.split("+")]
         unknown = [n for n in names if n not in MOD_MASKS and n not in KEY_CODES]
         if unknown:
@@ -71,6 +71,10 @@ class PushToTalk:
         self.on_press_cb = on_press
         self.on_release_cb = on_release
         self.on_cancel_cb = on_cancel
+        # the chord just went down and a take will start (toggle: on its release, hold: now): the
+        # island uses the moment to look whether Alcove shows something (05.10.); never in the way
+        # of the key
+        self.on_chord_cb = on_chord
         self._keys_down = set()    # non-modifier chord keys currently down
         self._chord_held = False   # chord physically complete (and alone) right now
         self._recording = False    # logical recording state (toggle mode without `active`)
@@ -120,8 +124,18 @@ class PushToTalk:
             self._chord_held = True
             self._spoiled = False
             if self.mode == "toggle":
-                pass                              # decided on release, unless spoiled
+                # decided on release, unless spoiled; a press that will stop a take needs no look
+                if self.on_chord_cb is not None and not (self.active() if self.active is not None else self._recording):
+                    try:
+                        self.on_chord_cb()
+                    except Exception:
+                        pass
             else:  # hold
+                if self.on_chord_cb is not None:    # just before the take: the island looks too
+                    try:
+                        self.on_chord_cb()
+                    except Exception:
+                        pass
                 self._recording = True
                 self._started = True
                 self.on_press_cb()

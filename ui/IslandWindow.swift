@@ -189,7 +189,19 @@ final class IslandController {
         case .recording:
             // (a dictation started during "Bereich wählen" is a take of its own: new island, sounds, mute)
             if previous == .recording && model.presented && panel?.isVisible == true && model.mode == state.mode { return }
-            beginTake(at: .recording)
+            // the look at Alcove (started when the keys went down) decides notch or capsule: a
+            // take that starts while it still runs (the held command, a very quick tap) shows its
+            // island once it is back, at most 0.15 s after it began; sound and mute do not wait
+            // (an older card or "Bereich wählen" may still be up meanwhile: replaced once the look is
+            // back, unless another take began in between)
+            let serial = takeSerial
+            let waiting = state.mode != .ocr && AlcoveSight.shared.waitForLook(atMost: 0.15) { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.state.phase == .recording, self.takeSerial == serial else { return }
+                    self.beginTake(at: .recording)
+                }
+            }
+            if !waiting { beginTake(at: .recording) }
             if state.mode != .ocr {          // choosing a region for Texterkennung records nothing
                 playSound("Tink")
                 OutputMute.begin(state.settings)
@@ -396,6 +408,22 @@ final class IslandController {
         geo.notch == nil || state.settings.islandShape == .kapsel || alcoveShowing(geo)
     }
 
+    /// The core: a dictation chord went down, the take starts on its release. With Alcove on
+    /// "Automatisch" there is time to look what Alcove shows (AlcoveSight), off the island's path.
+    /// Returns whether a look started; `then` runs once it has an answer (Texterkennung waits for
+    /// it, the dictation does not need to).
+    @discardableResult
+    func prepare(then: (() -> Void)? = nil) -> Bool {
+        guard !headless, state.settings.alcove == .auto, isAlcoveRunning(),
+              CGPreflightScreenCaptureAccess(), let screen = screenUnderMouse() else { return false }
+        let geo = IslandScreenGeometry(screen: screen)
+        guard let notch = geo.notch else { return false }
+        // the notch screen's top in window-list coordinates (origin at the top of the main screen)
+        let top = (NSScreen.screens.first?.frame.maxY ?? screen.frame.maxY) - screen.frame.maxY
+        AlcoveSight.shared.look(notchWidth: notch.width, scale: geo.scale, top: top, done: then)
+        return true
+    }
+
     /// Texterkennung: while the user chooses a region the island is left out of screen pictures
     /// (sharingType .none, 04.10.: screencapture then leaves it out), so "Bereich wählen" can
     /// show in the capsule over the apps' content without landing in the picture. Only then: the
@@ -412,7 +440,11 @@ final class IslandController {
         return max(0.3, s)
     }
 
+    /// counts takes begun: a deferred start only runs when none began since it was deferred
+    private var takeSerial = 0
+
     private func beginTake(at phase: Phase) {
+        takeSerial += 1
         cancelTimers()
         guard let screen = screenUnderMouse() else { return }
         let geo = IslandScreenGeometry(screen: screen)
@@ -463,12 +495,14 @@ final class IslandController {
             configure()
         }
         orderIn(geo)
-        // a panel shown before is reported on screen at once (04.10., measured): one that is not
-        // (it has come loose from this Space, seen live at 17:33) is replaced right away instead of
-        // after the heal timer's 0.4 s
-        if !headless && !suppressed, let panel, !reallyOnScreen(panel), panelShownBefore {
-            rebuildPanel("\(phase.rawValue) ordered in but not on screen (at once)")
-            orderIn(geo)
+        // a panel that has come loose from this Space (seen live 04.10. 17:33) is replaced after
+        // 60 ms (and checked once more at 0.35 s, see below). Not at once: right after a resize and
+        // ordering in, the window server has not booked the panel yet and reports it off screen
+        // (05.10.: a rebuild on almost every take).
+        if panelShownBefore {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self] in
+                MainActor.assumeIsolated { self?.verifyOnScreen() }
+            }
         }
         panelShownBefore = !headless && !suppressed
 
@@ -770,6 +804,8 @@ final class IslandController {
         case .dodge: return true
         case .takeover: return false
         case .auto:
+            // looked at while the keys were down (AlcoveSight); without a fresh look, the guess
+            if let seen = AlcoveSight.shared.recent() { return seen }
             switch UserDefaults(suiteName: Self.alcoveBundleID)?.string(forKey: "idleActivity") {
             case "none": return false
             case "nowPlaying", nil: return Self.otherAudioPlaying()
