@@ -109,6 +109,7 @@ class Cleaner:
         self._worker_cmd = worker_cmd
         self._proc = None
         self._ready = threading.Event()
+        self._needs_prefill = False       # started for a formula: the dictation prompts follow after
         self._load_s = 0.0
         self._lock = threading.Lock()
         self._pending = {}
@@ -173,6 +174,8 @@ class Cleaner:
         with self._lock:
             if self._alive():
                 self._send({"op": "touch"})     # still needed: restart its idle clock
+                if prefill and self._needs_prefill:
+                    self._prefill()
                 return
             self._ready.clear()
             try:
@@ -184,11 +187,13 @@ class Cleaner:
                 return
             self._proc = proc
         threading.Thread(target=self._reader, args=(proc,), name="llm-reader", daemon=True).start()
+        self._needs_prefill = True
         if prefill:
             self._prefill()
 
     def _prefill(self):
         # the cached system prompts are ready before the take stops (~0.3 s each, while speaking)
+        self._needs_prefill = False
         self._send({"op": "prefill", "systems": [self.prompts.system("de", st) for st in ("doc", "mail", "chat")]
                     + [self.prompts.command["de"]]})
 
@@ -287,7 +292,12 @@ class Cleaner:
                                "max_tokens": max_tokens, "temp": temp, "loop_guard": loop_guard,
                                "spec": ticket is not None}):
                 return None
-            if not slot[0].wait(timeout):
+            answered = slot[0].wait(timeout)
+            # a formula read ahead of it (one request at a time in the worker): its time is not
+            # this request's, so it is waited for instead of killing the worker and the formula
+            while not answered and any(tag == "formula" for tag in list(self._tags.values())):
+                answered = slot[0].wait(timeout)
+            if not answered:
                 if ticket is not None:    # speculative: it only waited behind real work; never kill
                     self.cancel(ticket)
                     return None
@@ -343,17 +353,20 @@ class Cleaner:
         self.warm(prefill=False)
         self._send({"op": "vision"})          # queued behind the load; nothing to do once built
 
-    def formula(self, image, timeout=60.0):
+    def formula(self, image, budget=52.0):
         """A screen region read by the vision part of the model: Markdown with LaTeX (formula.py
-        makes the renditions), or None. A real request: speculation yields to it."""
+        makes the renditions), or None. A real request: speculation yields to it. `budget`
+        covers the load too and stays under the UI's 60 s, so the UI never gives up on a read
+        that still lands in the history."""
         if not self.usable:
             return None
         cold = not self._alive()
         self.warm(prefill=False)
         t = time.time()
         while not self._ready.wait(0.05):
-            if not self.usable or not self._alive() or time.time() - t > LOAD_TIMEOUT_S:
+            if not self.usable or not self._alive() or time.time() - t > min(LOAD_TIMEOUT_S, budget):
                 return None
+        timeout = max(1.0, budget - (time.time() - t))
         rid = next(self._ids)
         slot = [threading.Event(), None]
         self._pending[rid] = slot
@@ -374,7 +387,7 @@ class Cleaner:
         finally:
             self._pending.pop(rid, None)
             self._tags.pop(rid, None)
-            if cold:
+            if self._needs_prefill:
                 self._prefill()               # a dictation right after finds its prompts ready
 
     # -- the two jobs -----------------------------------------------------------------------

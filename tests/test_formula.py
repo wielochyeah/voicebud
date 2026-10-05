@@ -62,6 +62,17 @@ class FormulaTests(unittest.TestCase):
         self.assertTrue(f.has_math("a $b$ c"))
         self.assertFalse(f.has_math("costs 5 \\$ and 6 \\$"))
 
+    def test_dollar_signs_that_are_no_formula(self):
+        self.assertEqual(f.plain("Der Preis ist 5 $ pro Stück.\n\nDie Formel $x^2 + y^2$ gilt."),
+                         "Der Preis ist 5 $ pro Stück.\n\nDie Formel x² + y² gilt.")
+        self.assertEqual(f.plain("Es kostet 5 $ und 6 $ pro Stück, also $a+b$."), "Es kostet 5 $ und 6 $ pro Stück, also a+b.")
+        self.assertEqual(f.plain(r"Kosten: \$5"), "Kosten: $5")
+
+    def test_aligned_never_puts_a_bare_ampersand_into_word(self):
+        h = f.html(r"$$\begin{aligned} a &= b \\ c &= d \end{aligned}$$")
+        self.assertNotIn("<mi>&</mi>", h)
+        self.assertNotIn("<mo>&</mo>", h)
+
     def test_renditions(self):
         r = f.renditions(BLOCK)
         self.assertEqual(set(r), {"markdown", "plain", "html"})

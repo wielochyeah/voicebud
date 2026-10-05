@@ -240,10 +240,10 @@ def main():
     threading.Thread(target=reader, name="stdin", daemon=True).start()
 
     while True:
+        drop_vision()                 # unused for --idle: the formula reader goes (the dictation model stays)
         try:
             req = inbox.get(timeout=30)[2]
-        except queue.Empty:           # quiet: the formula reader may go (the dictation model stays)
-            drop_vision()
+        except queue.Empty:
             continue
         op = req.get("op")
         if op == "quit":
@@ -266,6 +266,9 @@ def main():
                 mx.clear_cache()
                 state["busy"] = False
                 state["last"] = time.time()
+            continue
+        if op == "formula" and req.get("id") in cancelled:     # the core gave up on it while it waited
+            send({"id": req.get("id"), "cancelled": True})
             continue
         if op in ("vision", "formula"):
             state["busy"] = True

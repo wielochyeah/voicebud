@@ -29,8 +29,10 @@ def markdown(answer):
     return text
 
 
-# $$…$$ (may span lines) or $…$ (one line); a "\$" is a dollar sign, not a delimiter
-_MATH = re.compile(r"\$\$(.+?)\$\$|(?<!\\)\$(?!\$)(.+?)(?<!\\)\$", re.S)
+# $$…$$ (may span lines) or $…$ on one line, opened before and closed after a non-space and not
+# followed by a digit (the rule of pandoc and the chat apps: "5 $ und 6 $" is no formula); a "\$"
+# is a dollar sign
+_MATH = re.compile(r"\$\$((?s:.+?))\$\$|(?<![\\$])\$(?=[^\s$])([^\n$]*?[^\s\\$])\$(?![\d$])")
 
 
 def _split(text):
@@ -38,14 +40,14 @@ def _split(text):
     out, pos = [], 0
     for m in _MATH.finditer(text):
         if m.start() > pos:
-            out.append(("text", text[pos:m.start()]))
+            out.append(("text", text[pos:m.start()].replace("\\$", "$")))
         if m.group(1) is not None:
             out.append(("display", m.group(1).strip()))
         else:
             out.append(("inline", m.group(2).strip()))
         pos = m.end()
     if pos < len(text):
-        out.append(("text", text[pos:]))
+        out.append(("text", text[pos:].replace("\\$", "$")))
     return out
 
 
@@ -279,10 +281,13 @@ def _mathml(tex, display):
         from latex2mathml.converter import convert
     except ImportError:      # an install without it: Word gets the readable characters instead
         return None
+    # latex2mathml reads aligned/split/gathered as plain rows with a literal & (Word showed it)
+    tex = re.sub(r"\\(begin|end)\{(aligned|split|gathered)\}", lambda m: f"\\{m.group(1)}{{align*}}", tex)
     try:
-        return convert(tex, display="block" if display else "inline")
+        out = convert(tex, display="block" if display else "inline")
     except Exception:         # a construct it does not know: that formula as readable characters
         return None
+    return None if "<mi>&</mi>" in out or "<mo>&</mo>" in out else out
 
 
 _BULLET = re.compile(r"^\s*[-*•]\s+")

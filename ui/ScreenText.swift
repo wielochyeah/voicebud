@@ -72,7 +72,8 @@ final class ScreenText {
     /// ⌥ pressed while choosing (or held when the region was taken): read it as formulas
     private var formula = false
     private var optionTimer: Timer?
-    private var formulaID = 0
+    /// unique per read (a respawned UI must not take an old answer for a new region)
+    private var formulaID = ""
     private var formulaWaiting: (([String: Any]?) -> Void)?
     private var formulaTimeout: DispatchWorkItem?
 
@@ -278,8 +279,8 @@ final class ScreenText {
 
     /// the vision part of the local model, through the core (which also keeps the history entry)
     private func readFormula(_ path: URL, since t0: Date) {
-        formulaID += 1
-        let id = formulaID
+        let id = UUID().uuidString
+        formulaID = id
         formulaWaiting = { [weak self] reply in
             guard let self else { return }
             let error = reply?["error"] as? String
@@ -319,7 +320,7 @@ final class ScreenText {
 
     /// IPC "formula_result" (or the timeout): only the answer to the newest request counts
     func formulaResult(_ msg: [String: Any]) {
-        guard (msg["id"] as? Int) == formulaID, let w = formulaWaiting else { return }
+        guard (msg["id"] as? String) == formulaID, let w = formulaWaiting else { return }
         formulaWaiting = nil
         formulaTimeout?.cancel()
         w(msg["timeout"] != nil ? nil : msg)
