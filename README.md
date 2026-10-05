@@ -1,5 +1,7 @@
 # VoiceBud
 
+![VoiceBud: dictation, prompts, commands and text recognition in the notch, all local on your Mac](assets/voicebud-features.jpg)
+
 Fully offline voice dictation for macOS (Apple Silicon) — a free, local alternative to Wispr Flow.
 
 Press `ctrl+shift` in any app → speak → press again → clean text appears at your cursor. Speech-to-text runs on-device (Whisper large-v3-turbo via MLX), and the structuring (fillers, self-corrections, lists, paragraphs, punctuation) runs through a local LLM (Qwen3.5-4B via MLX). No cloud, no subscription, no audio leaving your Mac.
