@@ -339,7 +339,10 @@ def html(md):
                     run.append(line)
                     bullets = is_bullet
     body = "".join(blocks)
-    return f'<html><head><meta charset="utf-8"></head><body>{body}</body></html>'
+    # without a font Word sets pasted HTML in Times New Roman (05.10., Nils): its own default instead
+    style = "font-family: Aptos, Calibri, 'Helvetica Neue', Arial, sans-serif; font-size: 12pt"
+    return (f'<html><head><meta charset="utf-8"><style>body, p, li, h2, h3, h4 {{ {style} }}</style></head>'
+            f'<body style="{style}">{body}</body></html>')
 
 
 def renditions(answer):
