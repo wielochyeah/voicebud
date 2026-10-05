@@ -155,6 +155,40 @@ class ProcessTest(unittest.TestCase):
         self.assertEqual(self.copied, ["Das lange Diktat von eben."])
         self.assertEqual(self.states[-1][1]["message"], "Abgebrochen, Rohtext in der Zwischenablage")
 
+    def test_fixed_dictation_language_reaches_the_take(self):
+        # 05.10.: the hub's "Diktat: Deutsch / Englisch" fixes the language of the take; "auto"
+        # leaves the choice to the take (config.yaml)
+        seen = []
+        real = self.main.Take
+
+        class Recorder:
+            def __init__(self, *a, language=None, **k):
+                seen.append(language)
+
+            def abort(self):
+                pass
+        self.main.Take = Recorder
+        try:
+            for value, expected in (("en", "en"), ("de", "de"), ("auto", self.vb.cfg["stt"].get("language"))):
+                self.vb.settings["dictationLanguage"] = value
+                self.vb.start_rec("dictate")
+                self.vb.cancel_rec("dictate")
+                self.assertEqual(seen[-1], expected)
+        finally:
+            self.main.Take = real
+
+    def test_fixed_language_skips_detection(self):
+        import stream
+
+        class Fake:
+            forced_lang, lang_final = "en", None
+
+            class stt:
+                @staticmethod
+                def detect_language(*a):
+                    raise AssertionError("no detection with a fixed language")
+        self.assertEqual(stream.Take._language(Fake(), None, None, 1.0), "en")
+
     def test_usual_processing_time_is_learned(self):
         import tempfile
         from pathlib import Path
