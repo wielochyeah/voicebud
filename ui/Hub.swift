@@ -2756,10 +2756,20 @@ struct HubFormulaApps: View {
     let model: HubModel
     @Environment(\.colorScheme) private var scheme
 
-    static let usual = ["com.microsoft.Word", "com.apple.Notes", "com.apple.mail", "com.anthropic.claudefordesktop",
-                        "com.openai.chat", "com.apple.Safari", "com.google.Chrome", "company.thebrowser.Browser",
-                        "notion.id", "md.obsidian", "com.apple.iWork.Pages", "com.microsoft.Powerpoint",
-                        "com.microsoft.onenote.mac", "com.tinyspeck.slackmacgap"]
+    /// the apps formulas usually go to, in groups: writing, AI chats, browsers, notes, Office,
+    /// messengers (05.10., Nils missed WhatsApp). Only the installed ones are listed; every other
+    /// app gets its standard and can be added.
+    static let usual = [
+        "com.microsoft.Word", "com.apple.iWork.Pages", "com.apple.Notes", "com.apple.mail", "com.apple.TextEdit",
+        "com.anthropic.claudefordesktop", "com.openai.chat", "ai.perplexity.mac",
+        "com.apple.Safari", "com.google.Chrome", "company.thebrowser.Browser", "company.thebrowser.dia",
+        "org.mozilla.firefox", "com.microsoft.edgemac", "com.brave.Browser",
+        "notion.id", "md.obsidian", "net.shinyfrog.bear",
+        "com.microsoft.Powerpoint", "com.microsoft.onenote.mac", "com.microsoft.Outlook",
+        "com.apple.MobileSMS", "net.whatsapp.WhatsApp", "desktop.WhatsApp", "com.tinyspeck.slackmacgap",
+        "com.microsoft.teams2", "com.hnc.Discord", "ru.keepcoder.Telegram", "org.telegram.desktop",
+        "org.whispersystems.signal-desktop",
+    ]
 
     private func rows(_ s: UISettings) -> [String] {
         let usual = model.isPreview
@@ -2824,11 +2834,15 @@ struct HubContextPane: View {
     let model: HubModel
     @Environment(\.colorScheme) private var scheme
 
-    /// installed chat apps (they read the whole window by default) plus every app with an own choice
+    /// the usual apps that are installed, as in "Formeln je App" (05.10., Nils: Word, Notizen or
+    /// the browsers were missing, only the chat apps that read the whole window were listed), plus
+    /// every app with an own choice
     private func appRows(_ s: UISettings) -> [String] {
+        let usual = HubFormulaApps.usual + HubContextCopy.windowByDefault.filter { !HubFormulaApps.usual.contains($0) }
         let defaults = model.isPreview
-            ? ["com.tinyspeck.slackmacgap", "net.whatsapp.WhatsApp", "com.anthropic.claudefordesktop"]
-            : HubContextCopy.windowByDefault.filter { HubContextCopy.installed($0) }
+            ? ["com.microsoft.Word", "com.apple.mail", "com.tinyspeck.slackmacgap", "net.whatsapp.WhatsApp",
+               "com.anthropic.claudefordesktop"]
+            : usual.filter { HubContextCopy.installed($0) }
         let own = s.contextApps.keys.filter { k in !defaults.contains { $0.lowercased() == k.lowercased() } }
         return defaults + own.sorted()
     }

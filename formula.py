@@ -317,7 +317,7 @@ def html(md):
         if piece.startswith("$$") and piece.endswith("$$") and len(piece) > 4:
             tex = piece[2:-2].strip()
             m = _mathml(tex, display=True)
-            blocks.append(m if m else f"<p>{_html.escape(latex_to_text(tex))}</p>")
+            blocks.append(m if m else f'<p class="MsoNormal">{_html.escape(latex_to_text(tex))}</p>')
             continue
         for para in re.split(r"\n\s*\n", piece):
             lines = [l for l in para.strip("\n").split("\n") if l.strip()]
@@ -326,23 +326,22 @@ def html(md):
                 is_bullet = line is not None and bool(_BULLET.match(line))
                 if run and (line is None or is_bullet != bullets):
                     if bullets:
-                        blocks.append("<ul>" + "".join("<li>" + _inline_html(_BULLET.sub("", l)) + "</li>"
+                        blocks.append("<ul>" + "".join('<li class="MsoNormal">' + _inline_html(_BULLET.sub("", l)) + "</li>"
                                                         for l in run) + "</ul>")
                     elif len(run) == 1 and re.match(r"#{1,6}\s+", run[0]):
                         h = re.match(r"(#{1,6})\s+(.*)", run[0])
                         level = min(len(h.group(1)) + 1, 4)
                         blocks.append(f"<h{level}>{_inline_html(h.group(2))}</h{level}>")
                     else:
-                        blocks.append("<p>" + "<br>".join(_inline_html(l) for l in run) + "</p>")
+                        blocks.append('<p class="MsoNormal">' + "<br>".join(_inline_html(l) for l in run) + "</p>")
                     run = []
                 if line is not None:
                     run.append(line)
                     bullets = is_bullet
     body = "".join(blocks)
-    # without a font Word sets pasted HTML in Times New Roman (05.10., Nils): its own default instead
-    style = "font-family: Aptos, Calibri, 'Helvetica Neue', Arial, sans-serif; font-size: 12pt"
-    return (f'<html><head><meta charset="utf-8"><style>body, p, li, h2, h3, h4 {{ {style} }}</style></head>'
-            f'<body style="{style}">{body}</body></html>')
+    # paragraphs as Word's own "Normal" style: the text takes the document's font (without it Word
+    # set pasted HTML in Times New Roman, 05.10. Nils; a fixed font ignored the document; tested)
+    return f'<html><head><meta charset="utf-8"></head><body>{body}</body></html>'
 
 
 def renditions(answer):

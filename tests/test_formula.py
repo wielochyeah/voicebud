@@ -52,7 +52,8 @@ class FormulaTests(unittest.TestCase):
         h = f.html(BLOCK)
         self.assertEqual(h.count("<math"), 5)
         self.assertEqual(h.count('display="block"'), 1)
-        self.assertIn("<ul><li>", h)
+        self.assertIn("<ul><li", h)
+        self.assertIn('class="MsoNormal"', h)        # Word: the document's own font
         self.assertIn("<b>Fall 1: <math", h)
         self.assertNotIn("$", h)
 
