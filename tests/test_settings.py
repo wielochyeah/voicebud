@@ -10,7 +10,7 @@ import settings
 
 
 class LanguageDefaultsTest(unittest.TestCase):
-    """05.10.: new installs get English texts and German dictation (chosen in the first setup
+    """05.10.: new installs get English texts and automatic dictation (chosen in the first setup
     step); an install from before keeps German texts and automatic dictation."""
 
     def load(self, data):
@@ -29,7 +29,7 @@ class LanguageDefaultsTest(unittest.TestCase):
 
     def test_new_install(self):
         s = self.load({})
-        self.assertEqual((s["uiLanguage"], s["dictationLanguage"]), ("en", "de"))
+        self.assertEqual((s["uiLanguage"], s["dictationLanguage"]), ("en", "auto"))
 
     def test_install_from_before_keeps_its_languages(self):
         s = self.load({"onboardingDone": True, "liveText": False})

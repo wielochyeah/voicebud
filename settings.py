@@ -27,7 +27,7 @@ DEFAULTS = {
     "screenTextHistory": True,   # recognised texts in their own history (mode "ocr")
     "menuBarStyle": "schlicht",  # menu bar symbol while recording: schlicht | farbe | punkt | zeit (UI only)
     "uiLanguage": "en",          # the app's texts: system | de | en (UI only)
-    "dictationLanguage": "de",   # what Whisper listens for: auto (de or en per take) | de | en
+    "dictationLanguage": "auto", # what Whisper listens for: auto (de or en per take, recommended) | de | en
 }
 
 
@@ -52,10 +52,8 @@ def load():
                     isinstance(default, float) and isinstance(value, int)
                     and not isinstance(value, bool)):
                 out[key] = value
-        # an install from before the language settings keeps German texts and automatic dictation
-        # (new installs choose in the first setup step; the defaults are English and German)
-        if "dictationLanguage" not in data and data.get("onboardingDone") is True:
-            out["dictationLanguage"] = "auto"
+        # an install from before the language settings keeps German texts (new installs choose in
+        # the first setup step; the defaults are English texts and automatic dictation)
         if "uiLanguage" not in data and data.get("onboardingDone") is True:
             out["uiLanguage"] = "de"
         # old shape values: "kompakt" -> insel without live text, "live" -> insel with live text

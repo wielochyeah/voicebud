@@ -105,6 +105,7 @@ enum OnboardingRenderer {
 
     static func slug(_ s: Step) -> String {
         switch s {
+        case .language: return "sprache"
         case .welcome: return "willkommen"
         case .howItWorks: return "so-funktionierts"
         case .microphone: return "mikrofon"

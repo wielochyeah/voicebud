@@ -55,8 +55,16 @@ final class MenuBarIcon {
         case .schlicht: break
         }
         if OutputMute.isMuted { parts.append(Self.symbol("speaker.slash.fill", ink)) }
-        button.image = Self.row(parts)
-        item.length = NSStatusItem.variableLength
+        // one symbol alone (Farbe, Punkt) sits exactly where the plain microphone sits: the image
+        // itself with the symbol's alignment, in the square item (05.10.: a redrawn copy in a
+        // variable item stood a hair off, Nils)
+        if parts.count == 1 && style != .zeit {
+            button.image = parts[0]
+            item.length = NSStatusItem.squareLength
+        } else {
+            button.image = Self.row(parts)
+            item.length = NSStatusItem.variableLength
+        }
         button.toolTip = OutputMute.isMuted ? L("VoiceBud nimmt auf, Ton stumm") : L("VoiceBud nimmt auf")
     }
 
@@ -89,16 +97,19 @@ final class MenuBarIcon {
         return base.withSymbolConfiguration(config) ?? base
     }
 
-    /// the microphone with a red recording dot on its upper right
+    /// the microphone with a red recording dot on its upper right, the same size and alignment
+    /// as the microphone alone (so it does not move when the dot comes)
     static func dotted(_ mic: NSImage) -> NSImage {
-        let d: CGFloat = 5.5
-        let size = NSSize(width: mic.size.width + 2.5, height: mic.size.height)
-        return NSImage(size: size, flipped: false) { _ in
-            mic.draw(in: NSRect(origin: .zero, size: mic.size))
+        let d: CGFloat = 5
+        let size = mic.size
+        let image = NSImage(size: size, flipped: false) { _ in
+            mic.draw(in: NSRect(origin: .zero, size: size))
             NSColor(srgbHex: 0xFF3B30).setFill()
-            NSBezierPath(ovalIn: NSRect(x: size.width - d, y: size.height - d - 0.5, width: d, height: d)).fill()
+            NSBezierPath(ovalIn: NSRect(x: size.width - d, y: size.height - d, width: d, height: d)).fill()
             return true
         }
+        image.alignmentRect = mic.alignmentRect
+        return image
     }
 
     /// a capsule in the mode's colour: white microphone and the running time

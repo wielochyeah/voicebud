@@ -1,6 +1,12 @@
 // English texts for onboarding (Localization.swift): German text as written in the code -> English.
 extension Loc {
     static let onboarding: [String: String] = [
+        "Sprache": "Language",
+        "Die Sprache der App und die Sprache, in der du diktierst.": "The language of the app and the language you dictate in.",
+        "App": "App",
+        "Texte in Hub, Insel und Menü": "Texts in the hub, island and menu",
+        "Was du sprichst": "What you speak",
+        "Empfohlen ist Automatisch: Es erkennt Deutsch oder Englisch je Aufnahme. Beides lässt sich später im Hub unter Allgemein ändern.": "Automatic is recommended: it detects German or English for each take. You can change both later in the hub under General.",
         // window and footer
         "VoiceBud einrichten": "Set Up VoiceBud",
         "Zurück": "Back",

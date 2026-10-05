@@ -980,6 +980,41 @@ struct HubPressStyle: ButtonStyle {
     }
 }
 
+/// A small segmented switch in the hub's look (drawn in SwiftUI, so it also shows in renders,
+/// which AppKit's own segmented control does not).
+struct HubSegmented<Value: Hashable>: View {
+    let options: [(value: Value, title: String)]
+    let selection: Value
+    let select: (Value) -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let t = HubTheme(scheme)
+        HStack(spacing: 2) {
+            ForEach(options, id: \.value) { option in
+                let on = option.value == selection
+                Button { select(option.value) } label: {
+                    Text(option.title)
+                        .font(.system(size: 12, weight: on ? .semibold : .regular))
+                        .foregroundStyle(on ? t.fg : t.fg2)
+                        .padding(.horizontal, 10)
+                        .frame(height: 22)
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(on ? (t.dark ? Color.white.opacity(0.16) : Color.white) : Color.clear)
+                            .shadow(color: .black.opacity(on && !t.dark ? 0.12 : 0), radius: 1, y: 0.5))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(t.dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06)))
+        .fixedSize()
+    }
+}
+
 /// Tiles with live previews; the selection ring springs between them (matchedGeometryEffect).
 struct HubTilePicker<Value: Hashable, Preview: View>: View {
     let options: [(value: Value, title: String)]
@@ -1812,24 +1847,16 @@ struct HubGeneralPane: View {
                 HubGroupLabel(L("Sprache"))
                 HubCard {
                     HubRow(L("Oberfläche"), subtitle: L("Sprache von Hub, Insel, Menü und Einrichtung")) {
-                        Picker("", selection: Binding(get: { model.state.settings.uiLanguage },
-                                                      set: { v in model.update { $0.uiLanguage = v } })) {
-                            Text(L("Wie macOS")).tag(UILanguage.system)
-                            // each language in its own name, so it can be found in either language
-                            Text(verbatim: "Deutsch").tag(UILanguage.de)
-                            Text(verbatim: "English").tag(UILanguage.en)
-                        }
-                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                        // each language in its own name, so it can be found in either language
+                        HubSegmented(options: [(UILanguage.system, L("Wie macOS")), (.de, "Deutsch"), (.en, "English")],
+                                     selection: model.state.settings.uiLanguage,
+                                     select: { v in model.update { $0.uiLanguage = v } })
                     }
                     HubSeparator()
                     HubRow(L("Diktat"), subtitle: L("Automatisch erkennt Deutsch oder Englisch je Aufnahme")) {
-                        Picker("", selection: Binding(get: { model.state.settings.dictationLanguage },
-                                                      set: { v in model.update { $0.dictationLanguage = v } })) {
-                            Text(L("Automatisch")).tag(DictationLanguage.auto)
-                            Text(L("Deutsch")).tag(DictationLanguage.de)
-                            Text(L("Englisch")).tag(DictationLanguage.en)
-                        }
-                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                        HubSegmented(options: [(DictationLanguage.auto, L("Automatisch")), (.de, L("Deutsch")), (.en, L("Englisch"))],
+                                     selection: model.state.settings.dictationLanguage,
+                                     select: { v in model.update { $0.dictationLanguage = v } })
                     }
                 }
                 HubGroupLabel(L("Texterkennung"), top: 20)

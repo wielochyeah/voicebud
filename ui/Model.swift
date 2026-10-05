@@ -109,10 +109,11 @@ struct UISettings: Codable, Equatable {
     var muteExceptions: [String] = ["com.microsoft.teams2", "com.microsoft.teams", "us.zoom.xos", "com.apple.FaceTime"]
     /// how the menu bar symbol shows a recording (05.10.: Schlicht, Farbe, Roter Punkt, Zeit)
     var menuBarStyle: MenuBarStyle = .schlicht
-    /// new installs: English texts and German dictation, chosen in the first setup step (05.10.);
-    /// an install from before the setting keeps what it had (German texts, automatic dictation)
+    /// new installs: English texts and automatic dictation (recommended: German or English per
+    /// take, short takes German), chosen in the first setup step (05.10.); an install from before
+    /// the setting keeps German texts
     var uiLanguage: UILanguage = .en
-    var dictationLanguage: DictationLanguage = .de
+    var dictationLanguage: DictationLanguage = .auto
 
     enum CodingKeys: String, CodingKey {
         case islandStyle, waveStyle, waveLive, alcove, confirmSeconds, sounds, hideInFullscreen, screenText, screenTextHistory,

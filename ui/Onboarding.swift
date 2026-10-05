@@ -20,13 +20,14 @@ import SwiftUI
 @Observable
 final class OnboardingModel {
     enum Step: Int, CaseIterable, Identifiable {
-        case welcome, howItWorks, microphone, accessibility, inputMonitoring, models, testDictation,
+        case language, welcome, howItWorks, microphone, accessibility, inputMonitoring, models, testDictation,
              appearance, alcove, context, screenText, finish
 
         var id: Int { rawValue }
 
         var title: String {
             switch self {
+            case .language: return "Sprache"
             case .welcome: return "Willkommen"
             case .howItWorks: return "So funktioniert’s"
             case .microphone: return "Mikrofon"
@@ -148,6 +149,9 @@ final class OnboardingModel {
     var alcove: AlcoveChoice = .auto
     var context: ContextLevel = .cursor
     var launchAtLogin = true
+    /// first step (05.10.): the app's texts and the dictation language
+    var uiLanguage: UILanguage = .en
+    var dictationLanguage: DictationLanguage = .auto
     var hotkeys: [String: String] = ["dictate": "ctrl+shift", "prompt": "ctrl+alt"]
 
     /// true while nothing feeds the model (the window was opened without the core): levels are
@@ -534,6 +538,7 @@ struct OnboardingStepView: View {
 
     var body: some View {
         switch step {
+        case .language: OnboardingLanguage(model: model)
         case .welcome: OnboardingWelcome(model: model)
         case .howItWorks: OnboardingHowItWorks(model: model)
         case .microphone, .accessibility, .inputMonitoring: OnboardingPermissionStep(model: model, step: step)
@@ -2076,6 +2081,49 @@ struct OnboardingLevelBars: View {
 }
 
 // MARK: - 8 Darstellung
+
+/// Step 1 (05.10., Nils): the app's language and the dictation language. New installs start in
+/// English with German dictation; the page switches language the moment it is chosen, and a line
+/// in the other language points to the switch for whoever cannot read this one.
+struct OnboardingLanguage: View {
+    let model: OnboardingModel
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let t = HubTheme(scheme)
+        OnboardingPage {
+            HubSquircle(icon: HubIcon(symbol: "globe", top: 0x8CCBFF, bottom: 0x3E92F0), size: 64)
+                .shadow(color: .black.opacity(t.dark ? 0.3 : 0.12), radius: 6, y: 3)
+                .padding(.bottom, OnboardingGap.m)
+            OnboardingHeader(title: L("Sprache"),
+                             subtitle: L("Die Sprache der App und die Sprache, in der du diktierst."))
+                .padding(.bottom, OnboardingGap.xs)
+            // in the other language on purpose: the way to the switch for whoever needs it
+            Text(verbatim: Loc.shared.english ? "Lieber auf Deutsch? Unten bei App „Deutsch“ wählen."
+                                              : "Prefer English? Choose English next to App below.")
+                .font(OnboardingType.secondary)
+                .foregroundStyle(t.prose)
+                .padding(.bottom, OnboardingGap.l)
+            HubCard {
+                OnboardingRow(L("App"), subtitle: L("Texte in Hub, Insel und Menü")) {
+                    // each language in its own name, so it can be found in either language
+                    HubSegmented(options: [(UILanguage.en, "English"), (.de, "Deutsch")],
+                                 selection: model.uiLanguage,
+                                 select: { model.uiLanguage = $0; model.choicesChanged() })
+                }
+                HubSeparator()
+                OnboardingRow(L("Diktat"), subtitle: L("Was du sprichst")) {
+                    HubSegmented(options: [(DictationLanguage.auto, L("Automatisch")), (.de, L("Deutsch")), (.en, L("Englisch"))],
+                                 selection: model.dictationLanguage,
+                                 select: { model.dictationLanguage = $0; model.choicesChanged() })
+                }
+            }
+            .frame(width: OnboardingLayout.narrow + 60)
+            OnboardingFootnote(L("Empfohlen ist Automatisch: Es erkennt Deutsch oder Englisch je Aufnahme. Beides lässt sich später im Hub unter Allgemein ändern."), lines: 2)
+                .frame(width: OnboardingLayout.narrow + 60)
+        }
+    }
+}
 
 struct OnboardingAppearance: View {
     let model: OnboardingModel

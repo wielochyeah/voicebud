@@ -46,6 +46,8 @@ enum OnboardingBridge {
         m.mock = false
         m.hotkeys = state.hotkeys
         m.islandShape = state.settings.islandStyle == .kapsel ? .kapsel : .insel
+        m.uiLanguage = state.settings.uiLanguage == .de ? .de : .en
+        m.dictationLanguage = state.settings.dictationLanguage
         m.alcove = OnboardingModel.AlcoveChoice(rawValue: state.settings.alcove.rawValue) ?? .auto
         m.context = state.settings.contextLevel <= 1 ? .app : state.settings.contextLevel >= 3 ? .window : .cursor
         var a = OnboardingActions()
@@ -61,6 +63,8 @@ enum OnboardingBridge {
         a.micLevels = { on in send("mic", ["on": on]) }
         a.choicesChanged = { model in
             state.settings.islandStyle = model.islandShape == .kapsel ? .kapsel : .insel
+            state.settings.uiLanguage = model.uiLanguage
+            state.settings.dictationLanguage = model.dictationLanguage
             state.settings.alcove = AlcoveMode(rawValue: model.alcove.rawValue) ?? .auto
             state.settings.contextLevel = model.context == .app ? 1 : model.context == .window ? 3 : 2
             state.commitSettings()
