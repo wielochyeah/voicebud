@@ -115,5 +115,37 @@ class SpeculationTest(unittest.TestCase):
         self.assertEqual(self.sent, [{"op": "cancel", "id": 1}])
 
 
+
+class CommandTidyTest(unittest.TestCase):
+    """Befehlsmodus (05.10. challenge): the tidying must never cut into the edited text itself."""
+
+    def test_table_rows_are_not_collapsed(self):
+        from cleanup import _tidy_command
+        self.assertEqual(_tidy_command("| Export | yes | yes | yes |", "| Export | ja | ja | ja |"),
+                         "| Export | yes | yes | yes |")
+
+    def test_the_texts_own_first_line_is_no_preamble(self):
+        from cleanup import _tidy_command
+        sel = "Hier ist die Agnda für Montag:\n- Budget"
+        self.assertEqual(_tidy_command("Hier ist die Agenda für Montag:\n- Budget", sel),
+                         "Hier ist die Agenda für Montag:\n- Budget")
+        self.assertEqual(_tidy_command("Hier ist der überarbeitete Text:\nSehr geehrte Frau Albers", "hi frau albers"),
+                         "Sehr geehrte Frau Albers")
+
+    def test_quotes_go_only_when_they_wrap_the_answer(self):
+        from cleanup import _tidy_command
+        self.assertEqual(_tidy_command("„Wir liefern pünktlich“, hat er gesagt", "„Wir liefern puenktlich“, hat er gesagt"),
+                         "„Wir liefern pünktlich“, hat er gesagt")
+        self.assertEqual(_tidy_command('"Dear Ms Albers"', "hi ms albers"), "Dear Ms Albers")
+
+    def test_guards_language_and_meta(self):
+        import cleanup
+        self.assertEqual(cleanup._text_lang("Thanks a lot, I will sign the contract and send it to you"), "en")
+        self.assertEqual(cleanup._text_lang("Danke, ich werde den Vertrag unterschreiben und dir schicken"), "de")
+        self.assertTrue(cleanup._META.search("Das Wetter ist nicht im Text angegeben."))
+        self.assertFalse(cleanup._META.search("Der Text beschreibt die Quartalszahlen."))   # a summary stays
+        self.assertTrue(cleanup._TRANSLATE.search("übersetz das ins Englische"))
+        self.assertFalse(cleanup._TRANSLATE.search("mach das förmlicher"))
+
 if __name__ == "__main__":
     unittest.main()

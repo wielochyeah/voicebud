@@ -8,6 +8,7 @@ and layout.
 
 RAM: the model lives in a child process that warm() starts while the user speaks and that exits
 by itself after idle_unload_minutes, so idle VoiceBud holds none of it (SPEC §0)."""
+import difflib
 import itertools
 import json
 import re
@@ -19,6 +20,47 @@ import time
 from pathlib import Path
 
 import guards
+
+# -- command mode (05.10. challenge) -------------------------------------------------------------
+_QUOTES = "\"„“”«»'‚‘’"
+_TRANSLATE = re.compile(r"übersetz|translat|auf (deutsch|englisch)|ins (deutsche|englische)|"
+                        r"in(to)? (english|german)|\b(englisch|deutsch|english|german)\b", re.I)
+_META = re.compile(r"\bnicht (im (markierten |obigen |vorliegenden )?Text )?(angegeben|enthalten|erwähnt|genannt)\b|"
+                   r"\bnot (mentioned|specified|stated|included) in the (selected |given )?text\b|"
+                   r"\bthe (selected |given )?text (does not|doesn't) (contain|mention|say)\b|"
+                   r"\b(Der|Im) (markierte |obige |vorliegende )?Text enthält (lediglich|nur|keine)\b", re.I)
+_SUBJECT = re.compile(r"betreff|subject", re.I)
+_DE_WORDS = set("der die das und ist nicht ich wir sie du ein eine mit für auf den dem zu im bitte noch".split())
+_EN_WORDS = set("the and is not i we you a an with for on to in please of it be will".split())
+
+
+def _text_lang(text):
+    """German or English by their commonest small words (None: too short to tell)."""
+    words = re.findall(r"[a-zäöüß]+", text.lower())
+    de, en = sum(w in _DE_WORDS for w in words), sum(w in _EN_WORDS for w in words)
+    return "de" if de > en else "en" if en > de else None
+
+
+def _tidy_command(out, selection):
+    """The model's answer without its wrapping, never cutting into the text itself: a preamble
+    only if the selection does not start with those words, quotes only around the whole answer
+    and only if the selection has none at its ends, repeats only if the selection has none."""
+    out = re.sub(r"</?(text|anweisung|instruction)>", "", out)
+    out = re.sub(r"^\s*(Ausgabe|Output):\s*", "", out)
+    m = guards.PREAMBLE.match(out)
+    if m:
+        # the selection's own first words (a typo in them corrected: still the same words)
+        said = m.group(0).strip().lower()
+        head = selection.lstrip()[:len(said) + 4].lower()
+        if difflib.SequenceMatcher(None, said, head[:len(said)]).ratio() < 0.8:
+            out = out[m.end():]
+    out = out.strip()
+    sel = selection.strip()
+    if len(out) >= 2 and out[0] in _QUOTES and out[-1] in _QUOTES and not (sel[:1] in _QUOTES or sel[-1:] in _QUOTES):
+        out = out[1:-1].strip()
+    if not out:
+        return None
+    return out if guards.collapse_repeats(selection) != sel else guards.collapse_repeats(out)
 
 HERE = Path(__file__).resolve().parent
 PROMPTS = HERE / "prompts"
@@ -416,7 +458,13 @@ class Cleaner:
 
     def command(self, instruction, selection, language=None):
         """Befehlsmodus: edit the selected text as the spoken instruction says ("mach das kürzer").
-        Returns the new text, or None when it could not be done (the selection stays untouched)."""
+        Returns the new text, or None when it could not be done (the selection stays untouched).
+
+        05.10. challenge (37 real cases, 14 good): the model's text was often right and the
+        tidying here broke it (a table row collapsed, the first line taken for a preamble, a
+        quotation mark of the text cut off), and a few answers had no business replacing the
+        selection. The prompt stays as it is (every change to it flipped ~8 cases either way);
+        the guards below act only in their own failure case."""
         self.last_stats = {}
         if not self.usable or not instruction.strip() or not self._ensure(self.wait_words):
             return None
@@ -424,16 +472,36 @@ class Cleaner:
         tag = "anweisung" if lang == "de" else "instruction"
         user = f"<{tag}>\n{instruction}\n</{tag}>\n<text>\n{selection}\n</text>"
         max_tokens = len(selection) // 2 + 300
-        out = self._generate(self.prompts.command[lang], user, max_tokens=max_tokens,
-                             temp=0.0, timeout=min(300.0, 30.0 + max_tokens * 0.05), loop_guard=True)
+
+        def run(u):
+            raw = self._generate(self.prompts.command[lang], u, max_tokens=max_tokens,
+                                 temp=0.0, timeout=min(300.0, 30.0 + max_tokens * 0.05), loop_guard=True)
+            return _tidy_command(raw, selection) if raw else None
+
+        out = run(user)
         if not out:
             return None
-        out = re.sub(r"</?(text|anweisung|instruction)>", "", out)
-        out = re.sub(r"^\s*(Ausgabe|Output):\s*", "", out)
-        out = guards.PREAMBLE.sub("", out).strip().strip('"„“').strip()
-        if not out:
+        # the language flipped although no translation was asked for (an English text with
+        # "mach das förmlicher" came back German): once more with a hint, else leave it
+        src = _text_lang(selection)
+        if src and not _TRANSLATE.search(instruction) and _text_lang(out) not in (None, src):
+            name = {"de": ("Deutsch", "German"), "en": ("Englisch", "English")}[src]
+            hint = (f"Hinweis: Der Text ist {name[0]}. Die Ausgabe bleibt {name[0]}." if lang == "de"
+                    else f"Note: The text is {name[1]}. The output stays {name[1]}.")
+            self.last_stats["lang_retry"] = True
+            out = run(hint + "\n\n" + user)
+            if not out or _text_lang(out) not in (None, src):
+                return None
+        # an answer about the text instead of the text ("Das Wetter ist nicht im Text angegeben")
+        # must not replace the selection
+        if _META.search(out) and not _META.search(selection):
+            self.last_stats["meta_rejected"] = True
             return None
+        # asked for a subject line, got only that line for a whole mail: it goes on top of the mail
+        if _SUBJECT.search(instruction) and "\n" not in out.strip() and "\n" in selection.strip() \
+                and re.match(r"(Betreff|Subject)\s*:", out):
+            out = out.strip() + "\n\n" + selection.strip()
         # no drop_unsupported here: a translation or a sum brings numbers the selection does not
         # have, and dropping those lines silently cut the result (the user sees it in place and
         # can undo; a cut they do not notice is worse)
-        return guards.collapse_repeats(out)
+        return out
