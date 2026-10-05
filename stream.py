@@ -331,6 +331,8 @@ class Take:
     def _language(self, seg, trimmed, speech_s):
         """Decide de/en once there are >= 3 s of speech; until then a tentative guess on the
         speech so far (short takes stay German unless English clearly wins)."""
+        if self.forced_lang:
+            return self.forced_lang          # a fixed dictation language (hub)
         if self.lang_final:
             return self.lang_final
         self._speech_acc.append(trimmed)
@@ -360,7 +362,7 @@ class Take:
         speech = speech_stats(tail)
         if speech[1] < PREVIEW_MIN_S:
             return
-        text, _ = self.stt.transcribe(tail, language=self.lang_final or "de", speech=speech)
+        text, _ = self.stt.transcribe(tail, language=self.forced_lang or self.lang_final or "de", speech=speech)
         if self._finishing or start != self.commit_pos:
             return
         self._previews += 1

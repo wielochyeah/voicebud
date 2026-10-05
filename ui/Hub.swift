@@ -1804,7 +1804,29 @@ struct HubGeneralPane: View {
         VStack(spacing: 0) {
             HubPaneHeader(pane: .allgemein)
             HubSettingsColumn {
-                HubGroupLabel("Texterkennung")
+                HubGroupLabel("Sprache")
+                HubCard {
+                    HubRow("Oberfläche", subtitle: "Sprache von Hub, Insel, Menü und Einrichtung") {
+                        Picker("", selection: Binding(get: { model.state.settings.uiLanguage },
+                                                      set: { v in model.update { $0.uiLanguage = v } })) {
+                            Text("Wie macOS").tag(UILanguage.system)
+                            Text("Deutsch").tag(UILanguage.de)
+                            Text("English").tag(UILanguage.en)
+                        }
+                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    }
+                    HubSeparator()
+                    HubRow("Diktat", subtitle: "Automatisch erkennt Deutsch oder Englisch je Aufnahme") {
+                        Picker("", selection: Binding(get: { model.state.settings.dictationLanguage },
+                                                      set: { v in model.update { $0.dictationLanguage = v } })) {
+                            Text("Automatisch").tag(DictationLanguage.auto)
+                            Text("Deutsch").tag(DictationLanguage.de)
+                            Text("Englisch").tag(DictationLanguage.en)
+                        }
+                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    }
+                }
+                HubGroupLabel("Texterkennung", top: 20)
                 HubCard {
                     HubRow("Texterkennung mit ⇧⌘2", subtitle: "Bereich aufziehen, der Text landet in der Zwischenablage") {
                         HubSwitch(isOn: model.binding(\.screenText))

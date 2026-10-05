@@ -390,9 +390,12 @@ class VoiceBud:
         self.live = bool(self.settings.get("liveText"))
         seq = self.seq
         speculate = not self.live and bool(self.cfg["stt"].get("speculate", True)) and mode == "dictate"
+        # the hub's "Diktiersprache" (05.10.) fixes the language; "auto" keeps config.yaml's choice
+        fixed = self.settings.get("dictationLanguage")
+        language = fixed if fixed in ("de", "en") else self.cfg["stt"].get("language")
         self.take = Take(self.worker, on_partial=self._partial_sender(self.seq) if self.live else None,
                          preview=self.live, stream=self.live,
-                         language=self.cfg["stt"].get("language"), speculate=speculate,
+                         language=language, speculate=speculate,
                          on_speculation=lambda text, lang: threading.Thread(
                              target=self._speculate_llm, args=(seq, text, lang), name="spec-llm",
                              daemon=True).start(),

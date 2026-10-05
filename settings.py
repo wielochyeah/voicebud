@@ -26,6 +26,8 @@ DEFAULTS = {
     "screenText": True,          # Texterkennung with ⇧⌘2 (the UI owns the shortcut)
     "screenTextHistory": True,   # recognised texts in their own history (mode "ocr")
     "menuBarStyle": "schlicht",  # menu bar symbol while recording: schlicht | farbe | punkt | zeit (UI only)
+    "uiLanguage": "system",      # the app's texts: system | de | en (UI only)
+    "dictationLanguage": "auto", # what Whisper listens for: auto (de or en per take) | de | en
 }
 
 

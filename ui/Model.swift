@@ -12,6 +12,10 @@ enum WaveStyle: String, Codable, CaseIterable { case fein, sym, linie }
 enum AlcoveMode: String, Codable, CaseIterable { case auto, dodge, takeover }
 /// the menu bar symbol while recording (MenuBarIcon.swift); "schlicht" is the plain microphone
 enum MenuBarStyle: String, Codable, CaseIterable { case schlicht, farbe, punkt, zeit }
+/// the app's own texts: as macOS (German if macOS is German, else English), or fixed (05.10.)
+enum UILanguage: String, Codable, CaseIterable { case system, de, en }
+/// what Whisper listens for: German or English decided per take (as before), or fixed
+enum DictationLanguage: String, Codable, CaseIterable { case auto, de, en }
 
 /// What the confirmation shows about the screen context of a take (done message "context").
 /// Never the context itself: labels, counts and the names used.
@@ -105,11 +109,13 @@ struct UISettings: Codable, Equatable {
     var muteExceptions: [String] = ["com.microsoft.teams2", "com.microsoft.teams", "us.zoom.xos", "com.apple.FaceTime"]
     /// how the menu bar symbol shows a recording (05.10.: Schlicht, Farbe, Roter Punkt, Zeit)
     var menuBarStyle: MenuBarStyle = .schlicht
+    var uiLanguage: UILanguage = .system
+    var dictationLanguage: DictationLanguage = .auto
 
     enum CodingKeys: String, CodingKey {
         case islandStyle, waveStyle, waveLive, alcove, confirmSeconds, sounds, hideInFullscreen, screenText, screenTextHistory,
              keepModelsLoaded, liveText, confirmHoverExpand, contextLevel, contextApps, contextElectron,
-             onboardingDone, muteWhileRecording, muteExceptions, menuBarStyle
+             onboardingDone, muteWhileRecording, muteExceptions, menuBarStyle, uiLanguage, dictationLanguage
     }
 
     init() {}
@@ -140,6 +146,8 @@ struct UISettings: Codable, Equatable {
         muteWhileRecording = (try? c.decodeIfPresent(Bool.self, forKey: .muteWhileRecording)) ?? d.muteWhileRecording
         muteExceptions = (try? c.decodeIfPresent([String].self, forKey: .muteExceptions)) ?? d.muteExceptions
         menuBarStyle = (try? c.decodeIfPresent(MenuBarStyle.self, forKey: .menuBarStyle)) ?? d.menuBarStyle
+        uiLanguage = (try? c.decodeIfPresent(UILanguage.self, forKey: .uiLanguage)) ?? d.uiLanguage
+        dictationLanguage = (try? c.decodeIfPresent(DictationLanguage.self, forKey: .dictationLanguage)) ?? d.dictationLanguage
     }
 
     /// Writes only the SPEC §0 vocabulary: "insel" | "kapsel" plus `liveText`.
@@ -164,6 +172,8 @@ struct UISettings: Codable, Equatable {
         try c.encode(muteWhileRecording, forKey: .muteWhileRecording)
         try c.encode(muteExceptions, forKey: .muteExceptions)
         try c.encode(menuBarStyle, forKey: .menuBarStyle)
+        try c.encode(uiLanguage, forKey: .uiLanguage)
+        try c.encode(dictationLanguage, forKey: .dictationLanguage)
     }
 
     static func load() -> UISettings {
