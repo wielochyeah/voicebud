@@ -209,18 +209,20 @@ struct IslandContentKey: Equatable {
 // MARK: - Copy
 
 enum IslandCopy {
+    /// "0,7 s" in German, "0.7 s" in English
     static func seconds(_ s: Double) -> String {
-        String(format: "%.1f", max(0, s)).replacingOccurrences(of: ".", with: ",") + " s"
+        let value = String(format: "%.1f", max(0, s))
+        return (Loc.shared.english ? value : value.replacingOccurrences(of: ".", with: ",")) + " s"
     }
 
-    static func words(_ n: Int) -> String { n == 1 ? "1 Wort" : "\(n) Wörter" }
+    static func words(_ n: Int) -> String { n == 1 ? L("1 Wort") : L("%d Wörter", n) }
 
     static func title(_ d: DoneInfo, mode: Mode) -> String {
-        if mode == .ocr { return d.app.isEmpty ? "Text erkannt" : d.app }   // "Tabelle erkannt"
-        if d.toClipboard { return mode == .prompt ? "Prompt in der Zwischenablage" : "In der Zwischenablage" }
+        if mode == .ocr { return d.app.isEmpty ? L("Text erkannt") : message(d.app) }   // "Tabelle erkannt"
+        if d.toClipboard { return mode == .prompt ? L("Prompt in der Zwischenablage") : L("In der Zwischenablage") }
         let app = d.app.trimmingCharacters(in: .whitespacesAndNewlines)
-        let verb = mode == .command ? "Überarbeitet" : "Eingefügt"
-        return app.isEmpty ? verb : "\(verb) in \(app)"
+        if mode == .command { return app.isEmpty ? L("Überarbeitet") : L("Überarbeitet in %@", app) }
+        return app.isEmpty ? L("Eingefügt") : L("Eingefügt in %@", app)
     }
 
     /// dim suffix after the title; seconds move here when the right slot holds ⌘V.
@@ -229,17 +231,118 @@ enum IslandCopy {
         var parts: [String] = []
         if d.words > 0 { parts.append(words(d.words)) }
         if d.toClipboard && d.seconds > 0 { parts.append(seconds(d.seconds)) }
-        if let c = d.context, c.used, !c.rows.isEmpty { parts.append("mit Kontext") }
-        if let c = d.context, c.noteworthy { parts.append(c.label.replacingOccurrences(of: "Ohne Kontext, ", with: "ohne Kontext, ")) }
+        if let c = d.context, c.used, !c.rows.isEmpty { parts.append(L("mit Kontext")) }
+        if let c = d.context, c.noteworthy { parts.append(contextLabel(c.label, inline: true)) }
         let gap = "\u{2002}\u{2009}"
         return parts.isEmpty ? "" : gap + parts.joined(separator: gap)
+    }
+
+    // MARK: texts of the core
+
+    /// A message of the Python core or of Texterkennung (error and notice cards, the table count
+    /// of a recognition) in the current language. Both send German, which stays the protocol value
+    /// (state, logs and traces keep it); it is translated here, where it is shown. Fixed messages
+    /// are looked up as they are, the few the core builds from parts are taken apart first.
+    static func message(_ m: String) -> String {
+        guard Loc.shared.english else { return m }
+        if let fixed = Loc.en[m] { return fixed }
+        if let rest = m.dropPrefix("Gelernt: ") {
+            if let r = rest.range(of: " wird ") {
+                return L("Gelernt: %@ wird %@", String(rest[..<r.lowerBound]), String(rest[r.upperBound...]))
+            }
+            return L("Gelernt: %@", rest)
+        }
+        if let reason = m.dropPrefix("Befehl: ") { return L("Befehl: %@", withheld(reason)) }
+        if let type = m.dropPrefix("Fehler: ") { return L("Fehler: %@", type) }
+        if let n = m.dropSuffix(" Tabellen erkannt").flatMap({ Int($0) }) { return L("%d Tabellen erkannt", n) }
+        return probe(m) ?? m
+    }
+
+    /// why the core held the screen context back (context.py _LABELS)
+    static func withheld(_ reason: String) -> String { Loc.en[reason] ?? reason }
+
+    /// Kontext-Probe (menu, hold ⌥): "Mail: Cursor 412 Zeichen, Dokument 1.200, Fenster 3.400" or
+    /// "Mail: Passwortfeld". nil when a part is not one of these.
+    private static func probe(_ m: String) -> String? {
+        guard let colon = m.range(of: ": ", options: .backwards) else { return nil }
+        var parts: [String] = []
+        for part in m[colon.upperBound...].components(separatedBy: ", ") {
+            if let n = part.dropPrefix("Cursor ")?.dropSuffix(" Zeichen") {
+                parts.append(L("Cursor %@ Zeichen", number(n)))
+            } else if let n = part.dropPrefix("Dokument ") {
+                parts.append(L("Dokument %@", number(n)))
+            } else if let n = part.dropPrefix("Fenster ") {
+                parts.append(L("Fenster %@", number(n)))
+            } else if let label = Loc.en[part] {
+                parts.append(label)
+            } else {
+                return nil
+            }
+        }
+        return String(m[..<colon.upperBound]) + parts.joined(separator: ", ")
+    }
+
+    /// "1.234" (as the core writes counts) -> "1,234"
+    static func number(_ s: String) -> String {
+        guard Loc.shared.english, s.allSatisfy({ $0.isNumber || $0 == "." }) else { return s }
+        return s.replacingOccurrences(of: ".", with: ",")
+    }
+
+    /// The context label of a take: "Kontext aus Mail", "Ohne Kontext, Passwortfeld". `inline`:
+    /// inside the dim meta after the title, where "ohne" starts lower case.
+    static func contextLabel(_ label: String, inline: Bool = false) -> String {
+        guard Loc.shared.english else {
+            return inline ? label.replacingOccurrences(of: "Ohne Kontext, ", with: "ohne Kontext, ") : label
+        }
+        if let reason = label.dropPrefix("Ohne Kontext, ") {
+            return inline ? L("ohne Kontext, %@", withheld(reason)) : L("Ohne Kontext, %@", withheld(reason))
+        }
+        if let app = label.dropPrefix("Kontext aus ") { return L("Kontext aus %@", app) }
+        return Loc.en[label] ?? label
+    }
+
+    /// A row of the context section: the core's fixed labels, counts ("412 Zeichen"), names (kept as
+    /// they are), fixes ("Schimanska zu Szymańska"), the register and the prompt's material.
+    static func contextRow(_ row: [String]) -> (label: String, value: String) {
+        let label = row.first ?? "", value = row.count > 1 ? row[1] : ""
+        guard Loc.shared.english else { return (label, value) }
+        let shown: String
+        if let n = value.dropSuffix(" Zeichen"), n.allSatisfy({ $0.isNumber || $0 == "." }) {
+            shown = L("%@ Zeichen", number(n))
+        } else if label == "Korrigiert" {
+            shown = value.components(separatedBy: ", ").map { fix in
+                guard let r = fix.range(of: " zu ") else { return fix }
+                return L("%@ zu %@", String(fix[..<r.lowerBound]), String(fix[r.upperBound...]))
+            }.joined(separator: ", ")
+        } else if label == "Im Prompt", let r = materialSource(value) {
+            // "Markierter Text aus Mail („Betreff“)": German quotes „…“ become English “…”
+            let source = String(value[..<r.lowerBound])
+            let rest = String(value[r.upperBound...]).replacingOccurrences(of: "“", with: "”")
+                .replacingOccurrences(of: "„", with: "“")
+            shown = L("%@ aus %@", Loc.en[source] ?? source, rest)
+        } else if label == "Namen" {
+            shown = value
+        } else {
+            shown = Loc.en[value] ?? value
+        }
+        return (Loc.en[label] ?? label, shown)
+    }
+
+    /// the " aus " after the material's source ("Text aus dem Eingabefeld aus Mail" has two):
+    /// the first one whose source has a translation
+    private static func materialSource(_ value: String) -> Range<String.Index>? {
+        var cut = value.range(of: " aus ")
+        while let c = cut, Loc.en[String(value[..<c.lowerBound])] == nil {
+            cut = value.range(of: " aus ", range: c.upperBound..<value.endIndex)
+        }
+        return cut
     }
 
     /// One line for the compact card. The live card keeps the text's own line structure
     /// (greeting, paragraphs, sign-off on their own lines; blank lines collapse into one break).
     static func preview(_ d: DoneInfo, keepLines: Bool = false) -> String {
         let p = d.preview.trimmingCharacters(in: .whitespacesAndNewlines)
-        if p.isEmpty, d.toClipboard { return "Kein Textfeld aktiv. Mit ⌘V überall einfügen." }
+        if p.isEmpty, d.toClipboard { return L("Kein Textfeld aktiv. Mit ⌘V überall einfügen.") }
         if keepLines {
             return p.replacingOccurrences(of: "[ \\t]*\\n[ \\t\\n]*", with: "\n", options: .regularExpression)
         }
@@ -283,6 +386,13 @@ enum IslandCopy {
     static func capsuleErrorWidth(_ message: String) -> CGFloat {
         min(IslandMetrics.doneWidth, max(160, messageWidth(message) + 10 + 20 + 8 + 16))
     }
+}
+
+private extension String {
+    /// the rest after `prefix`, nil when the text does not start with it
+    func dropPrefix(_ prefix: String) -> String? { hasPrefix(prefix) ? String(dropFirst(prefix.count)) : nil }
+    /// the text before `suffix`, nil when it does not end with it
+    func dropSuffix(_ suffix: String) -> String? { hasSuffix(suffix) ? String(dropLast(suffix.count)) : nil }
 }
 
 // MARK: - Shapes
@@ -492,7 +602,7 @@ struct IslandMicBadge: View {
 /// Texterkennung while the crosshair is out: what the user is doing, in the mode colour
 struct IslandSelectHint: View {
     var body: some View {
-        Text("Bereich wählen")
+        Text(L("Bereich wählen"))
             .font(.system(size: 11.5, weight: .medium))
             .foregroundStyle(Palette.accent(.ocr).opacity(0.9))
             .fixedSize()
@@ -589,11 +699,11 @@ struct IslandSlowBody: View {
     let hotkey: String
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text("Dauert länger")
+            Text(L("Dauert länger"))
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(.white.opacity(0.88))
             Spacer(minLength: 8)
-            Text("\(hotkey) bricht ab")
+            Text(L("%@ bricht ab", hotkey))
                 .font(.system(size: 11.5))
                 .foregroundStyle(.white.opacity(0.5))
                 .fixedSize()
@@ -1243,13 +1353,13 @@ struct IslandCopyButton: View {
         }
         .buttonStyle(IslandPressStyle())
         .onHover { inside in if inside && !still { IslandHaptic.tick() } }
-        .accessibilityLabel(done ? "Kopiert" : "Text kopieren")
+        .accessibilityLabel(done ? L("Kopiert") : L("Text kopieren"))
     }
 
     private func label(copied: Bool) -> some View {
         HStack(spacing: 4) {
             if copied { Image(systemName: "checkmark").font(.system(size: 9.5, weight: .bold)) }
-            Text(copied ? "Kopiert" : "Kopieren")
+            Text(copied ? L("Kopiert") : L("Kopieren"))
         }
         .font(.system(size: 11.5, weight: .medium))
     }
@@ -1415,13 +1525,16 @@ struct NotchIslandView: View {
     private var bodyWidth: CGFloat {
         guard shown else { return model.notch.width - 8 }
         if phase == .error {
-            return IslandCopy.notchErrorWidth(model.errorMessage ?? "Fehler", notch: model.notch.width)
+            return IslandCopy.notchErrorWidth(errorText, notch: model.notch.width)
         }
         if live { return IslandMetrics.liveWidth }
         if expanded { return IslandMetrics.hoverWidth }
         if phase == .recording && model.mode == .ocr { return model.notch.width + 2 * 112 }   // room for "Bereich wählen"
         return phase == .done ? IslandMetrics.doneWidth : model.notch.width + 2 * IslandMetrics.earWidth
     }
+
+    /// the error or notice card's text in the current language (the core sends German)
+    private var errorText: String { IslandCopy.message(model.errorMessage ?? "Fehler") }
 
     /// processing past 5 s with the card look: a small body says so (compact flavour only;
     /// with live text the seconds go to the ear)
@@ -1587,7 +1700,7 @@ struct NotchIslandView: View {
                                stillCopied: model.stillCopied)
                     .transition(swap)
             } else if phase == .error {
-                IslandErrorBody(message: model.errorMessage ?? "Fehler")
+                IslandErrorBody(message: errorText)
                     .transition(swap)
             }
         }
@@ -1628,7 +1741,9 @@ struct CapsuleView: View {
         if live { return IslandMetrics.liveWidth }
         return expanded ? IslandMetrics.hoverWidth : IslandMetrics.doneWidth
     }
-    private var errorWidth: CGFloat { IslandCopy.capsuleErrorWidth(model.errorMessage ?? "Fehler") }
+    /// the error or notice card's text in the current language (the core sends German)
+    private var errorText: String { IslandCopy.message(model.errorMessage ?? "Fehler") }
+    private var errorWidth: CGFloat { IslandCopy.capsuleErrorWidth(errorText) }
     private var mainIsCard: Bool { phase == .done || phase == .error }
 
     private var contentKey: IslandContentKey {
@@ -1776,9 +1891,9 @@ struct CapsuleView: View {
                 IslandSlowSeconds(since: since).transition(t)
             }
             if phase == .processing, model.slowHint {
-                Text("Dauert länger").font(.system(size: 11.5, weight: .medium))
+                Text(L("Dauert länger")).font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(.white.opacity(0.75)).fixedSize().transition(t)
-                Text("\(HotkeyFormat.display(state.hotkeys["dictate"] ?? "ctrl+shift")) bricht ab")
+                Text(L("%@ bricht ab", HotkeyFormat.display(state.hotkeys["dictate"] ?? "ctrl+shift")))
                     .font(.system(size: 11)).foregroundStyle(.white.opacity(0.5)).fixedSize().transition(t)
             }
         }
@@ -1838,7 +1953,7 @@ struct CapsuleView: View {
     private var errorCard: some View {
         HStack(spacing: 8) {
             if model.noticeOK { IslandCheckBadge(mode: model.mode) } else { IslandErrorBadge() }
-            IslandErrorBody(message: model.errorMessage ?? "Fehler")
+            IslandErrorBody(message: errorText)
         }
         .padding(.vertical, 10)
         .padding(.leading, 10)
@@ -1856,15 +1971,16 @@ struct IslandContextSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(info.used ? "Verwendeter Kontext" : info.label)
+            Text(info.used ? L("Verwendeter Kontext") : IslandCopy.contextLabel(info.label))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.5))
-            ForEach(Array(info.rows.prefix(4).enumerated()), id: \.offset) { _, row in
+            ForEach(Array(info.rows.prefix(4).enumerated()), id: \.offset) { _, raw in
+                let row = IslandCopy.contextRow(raw)
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(row.first ?? "")
+                    Text(row.label)
                         .foregroundStyle(.white.opacity(0.5))
                         .frame(width: 96, alignment: .leading)
-                    Text(row.count > 1 ? row[1] : "")
+                    Text(row.value)
                         .foregroundStyle(.white.opacity(0.82))
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -1872,13 +1988,13 @@ struct IslandContextSection: View {
                 .font(.system(size: 11.5))
             }
             if let w = info.warning {
-                Text(w)
+                Text(L(w))
                     .font(.system(size: 11))
                     .foregroundStyle(Color(hex: 0xFFD27A))
                     .fixedSize(horizontal: false, vertical: true)
             }
             if info.used {
-                Text("Nur für dieses Diktat genutzt und schon verworfen.")
+                Text(L("Nur für dieses Diktat genutzt und schon verworfen."))
                     .font(.system(size: 10.5))
                     .foregroundStyle(.white.opacity(0.4))
             }
@@ -1901,7 +2017,7 @@ struct IslandContextOffButton: View {
             state.commitSettings()
             done = true
         } label: {
-            Text(done ? "Ausgeschaltet" : "In \(app) ausschalten")
+            Text(done ? L("Ausgeschaltet") : L("In %@ ausschalten", app))
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(.white.opacity(done ? 0.5 : 0.9))
                 .lineLimit(1)
@@ -1911,6 +2027,6 @@ struct IslandContextOffButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Bildschirmkontext in \(app) ausschalten")
+        .accessibilityLabel(L("Bildschirmkontext in %@ ausschalten", app))
     }
 }
