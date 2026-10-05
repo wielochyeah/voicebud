@@ -10,3 +10,102 @@ Press `ctrl+shift` in any app → speak → press again → clean text appears a
 - **Want to build it yourself with AI?** [steps.md](steps.md) has the exact Claude Code prompts that created this app.
 
 Built with Claude Code (planned with Opus 4.8, built with Fable 5).
+
+The interface is in German. Dictation works in German and English, and in a mix of both.
+
+## A tour
+
+All screenshots below are rendered from the app itself.
+
+### Dictation: `ctrl+shift`
+
+Press, speak, press again. The island grows out of the notch while VoiceBud listens, with a waveform that follows your voice.
+
+![The island in the notch while recording](docs/screenshots/dictation-recording.jpg)
+
+After the text is pasted, the island confirms where it went, how many words and how long it took.
+
+![Confirmation: pasted in Mail](docs/screenshots/dictation-done.jpg)
+
+Rest the pointer on the confirmation and it unfolds with the whole text and a copy button.
+
+![The confirmation unfolded with the whole text](docs/screenshots/dictation-card-expanded.jpg)
+
+### Live text (optional)
+
+Switch it on to watch the transcript while you speak. Self-corrections are cleaned up in the final text: "on Thursday, no, I mean Friday" becomes "on Friday".
+
+![Live text in the island](docs/screenshots/dictation-live-text.jpg)
+
+### Prompt: `ctrl+alt`
+
+Speak loosely and get a structured prompt for an AI (role, task, context), pasted at your cursor or put on the clipboard.
+
+![Prompt mode recording](docs/screenshots/prompt-recording.jpg)
+
+![A prompt on the clipboard](docs/screenshots/prompt-clipboard.jpg)
+
+### Command: hold `ctrl+cmd` over selected text
+
+Select text, hold the keys, say what to change ("more formal", "translate to English", "make it a list") and let go. The selection is rewritten in place.
+
+![Command mode, shown as a capsule](docs/screenshots/command-capsule.jpg)
+
+![Confirmation: revised in Mail](docs/screenshots/command-done.jpg)
+
+### Text recognition: `shift+cmd+2`
+
+Drag over any part of the screen and the text lands on the clipboard, a replacement for TextShot.
+- **Structure stays:** Paragraphs, lists and tables keep their structure. Tables paste as real tables into Notes, Mail, Numbers or Excel, and as Markdown into chat apps like Claude or ChatGPT.
+- **Terminals and code editors:** Every line stays a line, indentation included.
+- **Icons:** They are not read as stray characters.
+
+![Choosing a region](docs/screenshots/text-recognition-select.jpg)
+
+![A table recognised](docs/screenshots/text-recognition-table.jpg)
+
+### Screen context
+
+VoiceBud looks at the app and the text around your cursor to spell names right and match the tone. It never reads password fields and stores nothing. The confirmation shows what it used.
+
+![The confirmation with the context it used](docs/screenshots/context-card.jpg)
+
+### Learns your words, plus snippets
+
+Correct a word right after it was pasted and VoiceBud remembers the spelling for the next time. Snippets turn a spoken trigger into a whole block of text.
+
+![The dictionary in the hub](docs/screenshots/hub-woerterbuch.png)
+
+![Snippets in the hub](docs/screenshots/hub-kuerzel.png)
+
+### Island or capsule, and Alcove
+
+On Macs without a notch, or if you prefer it, VoiceBud floats as a capsule below the menu bar. With Alcove running, VoiceBud takes the notch while Alcove shows nothing and moves below it while Alcove shows something.
+
+![The capsule](docs/screenshots/capsule-recording.jpg)
+
+![Below Alcove's music activity](docs/screenshots/alcove-dodge.jpg)
+
+### When it takes longer
+
+From 5 seconds the island counts the seconds; from 10 seconds it says so and offers to cancel with the same keys.
+
+![Taking longer, cancel with the dictation keys](docs/screenshots/slow-hint.jpg)
+
+### The hub
+
+History with the original transcript next to the cleaned text, the dictionary, snippets, the look of the island, screen context per app and general settings. Open it from the microphone in the menu bar.
+
+![History, with the original transcript unfolded](docs/screenshots/hub-verlauf.png)
+
+![Island and capsule settings](docs/screenshots/hub-insel.png)
+
+![Screen context per app](docs/screenshots/hub-kontext.png)
+
+![General settings](docs/screenshots/hub-allgemein.png)
+
+### Menu bar
+
+Choose how the menu bar symbol shows a recording: plain (the default), in the mode's colour, with a red dot, or as a capsule with the running time.
+
+![The four menu bar symbols](docs/screenshots/menu-bar-symbols.png)
