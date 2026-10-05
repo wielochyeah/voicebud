@@ -109,8 +109,10 @@ struct UISettings: Codable, Equatable {
     var muteExceptions: [String] = ["com.microsoft.teams2", "com.microsoft.teams", "us.zoom.xos", "com.apple.FaceTime"]
     /// how the menu bar symbol shows a recording (05.10.: Schlicht, Farbe, Roter Punkt, Zeit)
     var menuBarStyle: MenuBarStyle = .schlicht
-    var uiLanguage: UILanguage = .system
-    var dictationLanguage: DictationLanguage = .auto
+    /// new installs: English texts and German dictation, chosen in the first setup step (05.10.);
+    /// an install from before the setting keeps what it had (German texts, automatic dictation)
+    var uiLanguage: UILanguage = .en
+    var dictationLanguage: DictationLanguage = .de
 
     enum CodingKeys: String, CodingKey {
         case islandStyle, waveStyle, waveLive, alcove, confirmSeconds, sounds, hideInFullscreen, screenText, screenTextHistory,
@@ -146,8 +148,9 @@ struct UISettings: Codable, Equatable {
         muteWhileRecording = (try? c.decodeIfPresent(Bool.self, forKey: .muteWhileRecording)) ?? d.muteWhileRecording
         muteExceptions = (try? c.decodeIfPresent([String].self, forKey: .muteExceptions)) ?? d.muteExceptions
         menuBarStyle = (try? c.decodeIfPresent(MenuBarStyle.self, forKey: .menuBarStyle)) ?? d.menuBarStyle
-        uiLanguage = (try? c.decodeIfPresent(UILanguage.self, forKey: .uiLanguage)) ?? d.uiLanguage
-        dictationLanguage = (try? c.decodeIfPresent(DictationLanguage.self, forKey: .dictationLanguage)) ?? d.dictationLanguage
+        uiLanguage = (try? c.decodeIfPresent(UILanguage.self, forKey: .uiLanguage)) ?? (onboardingDone ? .de : d.uiLanguage)
+        dictationLanguage = (try? c.decodeIfPresent(DictationLanguage.self, forKey: .dictationLanguage))
+            ?? (onboardingDone ? .auto : d.dictationLanguage)
     }
 
     /// Writes only the SPEC §0 vocabulary: "insel" | "kapsel" plus `liveText`.
