@@ -242,6 +242,8 @@ final class HubModel {
     var previewExpanded: Set<Int64> = []
     var previewHoverTerm: String?
     var previewAlcoveRunning: Bool?
+    /// renders only: the snippets list (ImageRenderer never runs onAppear, so the pane would be empty)
+    var previewSnippets: [[String: String]] = []
 
     @ObservationIgnored private let store: HistoryStore?
 
@@ -2877,14 +2879,15 @@ struct HubSnippetsPane: View {
                     }
                     .padding(12)
                 }
-                HubGroupLabel(items.count == 1 ? L("1 Kürzel") : L("%d Kürzel", items.count), top: 20)
+                let shown = isStatic ? model.previewSnippets : items
+                HubGroupLabel(shown.count == 1 ? L("1 Kürzel") : L("%d Kürzel", shown.count), top: 20)
                 HubCard {
-                    if items.isEmpty {
+                    if shown.isEmpty {
                         Text(L("Noch keine Kürzel."))
                             .font(.system(size: 13)).foregroundStyle(t.fg3)
                             .padding(.horizontal, 12).frame(height: 44, alignment: .leading)
                     }
-                    ForEach(Array(items.enumerated()), id: \.offset) { i, item in
+                    ForEach(Array(shown.enumerated()), id: \.offset) { i, item in
                         if i > 0 { HubSeparator() }
                         HubRow(item["trigger"] ?? "", subtitle: (item["text"] ?? "").replacingOccurrences(of: "\n", with: "  ")) {
                             HubChip(title: L("Entfernen")) { remove(i) }

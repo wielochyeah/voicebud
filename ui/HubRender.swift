@@ -83,13 +83,20 @@ enum HubRenderer {
             model.previewExpanded = [first.id]
         }
         model.previewHoverTerm = "myPACE"
+        model.previewSnippets = Loc.shared.english
+            ? [["trigger": "my signature", "text": "Best regards\nAlex Weber\nProduct Team"],
+               ["trigger": "my address", "text": "Hauptstraße 12, 60311 Frankfurt am Main"]]
+            : [["trigger": "meine Signatur", "text": "Viele Grüße\nAlex Weber\nProduktteam"],
+               ["trigger": "meine Adresse", "text": "Hauptstraße 12, 60311 Frankfurt am Main"]]
         return model
     }
 
-    private static let sampleTerms = [
-        "AI-Slop", "shadcn", "FS-SC", "Alvantiq", "myPACE", "ACAR", "Repo", "Slides",
-        "Excel-Sheet", "To-do-Liste", "Deadline", "Feedback", "deployen",
-    ]
+    // the samples follow the UI language (05.10.: the README shows the English app)
+    private static var sampleTerms: [String] { Loc.shared.english
+        ? ["AI slop", "shadcn", "FS-SC", "Alvantiq", "myPACE", "ACAR", "repo", "slides",
+           "Excel sheet", "to-do list", "deadline", "feedback", "deploy"]
+        : ["AI-Slop", "shadcn", "FS-SC", "Alvantiq", "myPACE", "ACAR", "Repo", "Slides",
+           "Excel-Sheet", "To-do-Liste", "Deadline", "Feedback", "deployen"] }
 
     private static func sampleEntries() -> [HistoryEntry] {
         let cal = Calendar.current
@@ -98,7 +105,7 @@ enum HubRenderer {
             cal.date(byAdding: DateComponents(day: dayOffset, hour: h, minute: m), to: today) ?? today
         }
         func words(_ s: String) -> Int { s.split(whereSeparator: \.isWhitespace).count }
-        let rows: [(Date, Mode, String, String, String, Double)] = [
+        let german: [(Date, Mode, String, String, String, Double)] = [
             (at(0, 9, 41), .dictate, "Mail",
              "Hallo Frau Becker, vielen Dank für die schnelle Rückmeldung. Den Termin am Freitag kann ich leider nicht wahrnehmen. Würde Ihnen Montag um 10 Uhr passen?",
              "ähm hallo frau becker vielen dank für die schnelle rückmeldung den termin am donnerstag nein ich meine freitag kann ich leider nicht so wahrnehmen würde ihnen halt montag um 10 uhr passen",
@@ -124,9 +131,36 @@ enum HubRenderer {
              "kannst du mir das protokoll von der vollversammlung in fünf stichpunkten zusammenfassen und die offenen entscheidungen markieren",
              1.2),
         ]
+        let english: [(Date, Mode, String, String, String, Double)] = [
+            (at(0, 9, 41), .dictate, "Mail",
+             "Hi Ms Becker, thanks for the quick reply. Unfortunately I can't make the meeting on Friday. Would Monday at 10 am work for you?",
+             "uhm hi ms becker thanks for the quick reply unfortunately i can't make the meeting on thursday no i mean friday would monday at 10 am work for you",
+             0.7),
+            (at(0, 9, 15), .prompt, "Claude",
+             "Role: You are an experienced motion designer. Task: Revise the end card of video 1.2 so it matches the series layout from 1.1 exactly. Pay attention to spacing, type sizes and the timing of the fade-in.",
+             "okay so you're a motion designer and you should revise the end card of video one point two so it looks exactly like the series layout from one one so spacing type sizes and the timing",
+             1.9),
+            (at(0, 8, 58), .dictate, "Slack",
+             "Be there in 5 minutes, go ahead and start without me.",
+             "be there in five minutes go ahead and start without me",
+             0.3),
+            (at(-1, 18, 22), .dictate, "Notes",
+             "Weekend shopping: coffee beans (single origin), oat milk, bread from the bakery.",
+             "uh weekend shopping coffee beans single origin oat milk and bread from the bakery",
+             0.4),
+            (at(-1, 16, 5), .dictate, "Messages",
+             "Sounds good, I'll bring the projector.",
+             "sounds good i'll bring the projector",
+             0.3),
+            (at(-1, 11, 12), .prompt, "Claude",
+             "Summarise the minutes of the general assembly in five bullet points and mark open decisions.",
+             "can you summarise the minutes from the general assembly in five bullet points and mark the open decisions",
+             1.2),
+        ]
+        let rows = Loc.shared.english ? english : german
         return rows.enumerated().map { idx, r in
             HistoryEntry(id: Int64(100 - idx), date: r.0, mode: r.1, app: r.2, raw: r.4, final: r.3,
-                         lang: "de", audioSeconds: nil, totalSeconds: r.5, words: words(r.3))
+                         lang: Loc.shared.english ? "en" : "de", audioSeconds: nil, totalSeconds: r.5, words: words(r.3))
         }
     }
 }

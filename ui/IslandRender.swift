@@ -18,20 +18,40 @@ enum IslandRenderer {
     nonisolated static let crop = CGSize(width: 600, height: 220)
     static let notch = CGSize(width: 185, height: 32)
     static let speechBands: [Float] = [0.62, 0.85, 0.74, 0.55, 0.42, 0.30, 0.18]
-    static let liveSample = "Hallo Frau Becker, vielen Dank für die schnelle Rückmeldung. Den Termin am Donnerstag kann ich leider nicht wahrnehmen, nein, ich meine Freitag"
-    static let liveLong = "Kurz zum Stand der Endkarte: Die Abstände stimmen jetzt mit dem Serienlayout aus Video 1.1 überein, die Schrift ist eine Stufe kleiner und der Logoblock sitzt wieder auf der Grundlinie. Offen ist nur noch, ob der Hintergrund"
-    static let mailDone = DoneInfo(app: "Mail", words: 31, seconds: 0.6,
-                                   preview: "Hallo Frau Becker, vielen Dank für die schnelle Rückmeldung zum Termin am Freitag.",
-                                   toClipboard: false)
-    static let liveDone = DoneInfo(app: "Mail", words: 31, seconds: 0.7,
-                                   preview: "Hallo Frau Becker,\n\nvielen Dank für die schnelle Rückmeldung. Den Termin am Freitag kann ich leider nicht wahrnehmen. Würde Ihnen Montag um 10 Uhr passen?\n\nViele Grüße\nNils",
-                                   toClipboard: false)
-    static let clipDone = DoneInfo(app: "", words: 18, seconds: 0.5,
-                                   preview: "Bin in fünf Minuten da, fangt schon mal ohne mich an, die Unterlagen liegen im Teamordner.",
-                                   toClipboard: true)
+    // the sample texts follow the UI language (05.10.: the README shows the English app)
+    private static var en: Bool { Loc.shared.english }
+    static var liveSample: String { en
+        ? "Hi Ms Becker, thanks for the quick reply. I can't make the meeting on Thursday, no, I mean Friday"
+        : "Hallo Frau Becker, vielen Dank für die schnelle Rückmeldung. Den Termin am Donnerstag kann ich leider nicht wahrnehmen, nein, ich meine Freitag" }
+    static var liveLong: String { en
+        ? "Quick update on the end card: the spacing now matches the series layout from video 1.1, the type is one step smaller and the logo block sits on the baseline again. The only open point is whether the background"
+        : "Kurz zum Stand der Endkarte: Die Abstände stimmen jetzt mit dem Serienlayout aus Video 1.1 überein, die Schrift ist eine Stufe kleiner und der Logoblock sitzt wieder auf der Grundlinie. Offen ist nur noch, ob der Hintergrund" }
+    static var mailDone: DoneInfo { DoneInfo(app: "Mail", words: 31, seconds: 0.6,
+                                   preview: en ? "Hi Ms Becker, thanks for the quick reply about the meeting on Friday."
+                                               : "Hallo Frau Becker, vielen Dank für die schnelle Rückmeldung zum Termin am Freitag.",
+                                   toClipboard: false) }
+    static var liveDone: DoneInfo { DoneInfo(app: "Mail", words: 31, seconds: 0.7,
+                                   preview: en ? "Hi Ms Becker,\n\nthanks for the quick reply. Unfortunately I can't make the meeting on Friday. Would Monday at 10 am work for you?\n\nBest regards\nNils"
+                                               : "Hallo Frau Becker,\n\nvielen Dank für die schnelle Rückmeldung. Den Termin am Freitag kann ich leider nicht wahrnehmen. Würde Ihnen Montag um 10 Uhr passen?\n\nViele Grüße\nNils",
+                                   toClipboard: false) }
+    static var clipDone: DoneInfo { DoneInfo(app: "", words: 18, seconds: 0.5,
+                                   preview: en ? "Be there in five minutes, go ahead and start without me, the documents are in the team folder."
+                                               : "Bin in fünf Minuten da, fangt schon mal ohne mich an, die Unterlagen liegen im Teamordner.",
+                                   toClipboard: true) }
 
     /// hovered confirmations (SPEC §0, 03.10.): a long multi-paragraph mail that needs the fade
-    static let longMail = """
+    static var longMail: String { en ? """
+        Hi Ms Becker,
+
+        thanks for the quick reply and the revised documents. Unfortunately I can't make the meeting on Friday, as I'm with a client in Frankfurt all morning that day.
+
+        Would Monday at 10 am work for you instead? Then we could go through the open points on the end card, the series layout and the schedule for the next three videos in peace. I'll send you a short list beforehand so we're both well prepared.
+
+        If Monday doesn't work, Tuesday afternoon from 2 pm would be fine too. I'll put the rough cut of video 1.4 in our shared folder tonight, the subtitles follow tomorrow morning.
+
+        Best regards
+        Nils
+        """ : """
         Hallo Frau Becker,
 
         vielen Dank für die schnelle Rückmeldung und die überarbeiteten Unterlagen. Den Termin am Freitag kann ich leider nicht wahrnehmen, weil ich an dem Tag den ganzen Vormittag beim Kunden in Frankfurt bin.
@@ -42,12 +62,16 @@ enum IslandRenderer {
 
         Viele Grüße
         Nils
-        """
-    static let clipText = """
+        """ }
+    static var clipText: String { en ? """
+        Be there in five minutes, go ahead and start without me. The documents are in the team folder under "General Assembly", the slides are up to date.
+
+        See you soon
+        """ : """
         Bin in fünf Minuten da, fangt schon mal ohne mich an. Die Unterlagen liegen im Teamordner unter „Vollversammlung“, die Folien sind auf dem neuesten Stand.
 
         Bis gleich
-        """
+        """ }
 
     static func hoverDone(_ text: String, app: String = "Mail", seconds: Double = 0.7, clipboard: Bool = false,
                      keepLines: Bool = false) -> DoneInfo {
@@ -96,7 +120,8 @@ enum IslandRenderer {
             Scene(name: "ocr-tabelle-erkannt") { _, m in
                 m.phase = .done; m.mode = .ocr
                 m.done = DoneInfo(app: "Tabelle erkannt", words: 74, seconds: 0.4,
-                                  preview: "Projektstand Oktober Die Prüfung der Übergabeunterlagen ist weitgehend …",
+                                  preview: en ? "Project status October The review of the handover documents is largely …"
+                                              : "Projektstand Oktober Die Prüfung der Übergabeunterlagen ist weitgehend …",
                                   toClipboard: true)
             },
             Scene(name: "kompakt-recording-fein") { s, m in m.phase = .recording; s.settings.waveStyle = .fein },

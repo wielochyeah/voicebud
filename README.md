@@ -11,11 +11,17 @@ Press `ctrl+shift` in any app → speak → press again → clean text appears a
 
 Built with Claude Code (planned with Opus 4.8, built with Fable 5).
 
-The interface is in German. Dictation works in German and English, and in a mix of both.
+The interface is in English or German: it follows your Mac's language until you pick one. Dictation works in German and English, and in a mix of both.
 
 ## A tour
 
 All screenshots below are rendered from the app itself.
+
+### Language
+
+Right after the welcome, setup asks for two languages: the app's own (English or German, preset from your Mac) and the language you dictate in. Automatic is recommended: it detects German or English for each take. Both can be changed later in the hub under General.
+
+![The language step in setup](docs/screenshots/setup-language.png)
 
 ### Dictation: `ctrl+shift`
 
@@ -94,7 +100,7 @@ From 5 seconds the island counts the seconds; from 10 seconds it says so and off
 
 ### The hub
 
-History with the original transcript next to the cleaned text, the dictionary, snippets, the look of the island, screen context per app and general settings. Open it from the microphone in the menu bar.
+History with the original transcript next to the cleaned text, the dictionary, snippets, the look of the island, screen context per app and general settings, including both languages. Open it from the microphone in the menu bar.
 
 ![History, with the original transcript unfolded](docs/screenshots/hub-verlauf.png)
 

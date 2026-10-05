@@ -29,7 +29,7 @@ class LanguageDefaultsTest(unittest.TestCase):
 
     def test_new_install(self):
         s = self.load({})
-        self.assertEqual((s["uiLanguage"], s["dictationLanguage"]), ("en", "auto"))
+        self.assertEqual((s["uiLanguage"], s["dictationLanguage"]), ("system", "auto"))
 
     def test_install_from_before_keeps_its_languages(self):
         s = self.load({"onboardingDone": True, "liveText": False})

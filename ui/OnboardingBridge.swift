@@ -46,7 +46,7 @@ enum OnboardingBridge {
         m.mock = false
         m.hotkeys = state.hotkeys
         m.islandShape = state.settings.islandStyle == .kapsel ? .kapsel : .insel
-        m.uiLanguage = state.settings.uiLanguage == .de ? .de : .en
+        m.uiLanguage = state.settings.uiLanguage
         m.dictationLanguage = state.settings.dictationLanguage
         m.alcove = OnboardingModel.AlcoveChoice(rawValue: state.settings.alcove.rawValue) ?? .auto
         m.context = state.settings.contextLevel <= 1 ? .app : state.settings.contextLevel >= 3 ? .window : .cursor

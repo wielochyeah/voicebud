@@ -112,7 +112,7 @@ struct UISettings: Codable, Equatable {
     /// new installs: English texts and automatic dictation (recommended: German or English per
     /// take, short takes German), chosen in the first setup step (05.10.); an install from before
     /// the setting keeps German texts
-    var uiLanguage: UILanguage = .en
+    var uiLanguage: UILanguage = .system
     var dictationLanguage: DictationLanguage = .auto
 
     enum CodingKeys: String, CodingKey {

@@ -20,7 +20,7 @@ import SwiftUI
 @Observable
 final class OnboardingModel {
     enum Step: Int, CaseIterable, Identifiable {
-        case language, welcome, howItWorks, microphone, accessibility, inputMonitoring, models, testDictation,
+        case welcome, language, howItWorks, microphone, accessibility, inputMonitoring, models, testDictation,
              appearance, alcove, context, screenText, finish
 
         var id: Int { rawValue }
@@ -149,8 +149,8 @@ final class OnboardingModel {
     var alcove: AlcoveChoice = .auto
     var context: ContextLevel = .cursor
     var launchAtLogin = true
-    /// first step (05.10.): the app's texts and the dictation language
-    var uiLanguage: UILanguage = .en
+    /// second step (05.10.): the app's texts (as macOS until chosen) and the dictation language
+    var uiLanguage: UILanguage = .system
     var dictationLanguage: DictationLanguage = .auto
     var hotkeys: [String: String] = ["dictate": "ctrl+shift", "prompt": "ctrl+alt"]
 
@@ -2082,9 +2082,10 @@ struct OnboardingLevelBars: View {
 
 // MARK: - 8 Darstellung
 
-/// Step 1 (05.10., Nils): the app's language and the dictation language. New installs start in
-/// English with German dictation; the page switches language the moment it is chosen, and a line
-/// in the other language points to the switch for whoever cannot read this one.
+/// Step 2, right after the welcome (05.10., Nils): the app's language and the dictation language.
+/// Until chosen the app follows macOS (German on a German Mac, else English) and dictation detects
+/// the language per take; the page switches language the moment it is chosen, and a line in the
+/// other language points to the switch for whoever cannot read this one.
 struct OnboardingLanguage: View {
     let model: OnboardingModel
     @Environment(\.colorScheme) private var scheme
@@ -2108,7 +2109,7 @@ struct OnboardingLanguage: View {
                 OnboardingRow(L("App"), subtitle: L("Texte in Hub, Insel und Menü")) {
                     // each language in its own name, so it can be found in either language
                     HubSegmented(options: [(UILanguage.en, "English"), (.de, "Deutsch")],
-                                 selection: model.uiLanguage,
+                                 selection: model.uiLanguage == .system ? (Loc.shared.english ? .en : .de) : model.uiLanguage,
                                  select: { model.uiLanguage = $0; model.choicesChanged() })
                 }
                 HubSeparator()
