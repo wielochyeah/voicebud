@@ -1,6 +1,7 @@
 faster-whisper
+mlx-whisper
+mlx-lm==0.32.0
 sounddevice
-pynput
 pyobjc-framework-Quartz
 pyobjc-framework-Cocoa
 pyobjc-framework-ApplicationServices

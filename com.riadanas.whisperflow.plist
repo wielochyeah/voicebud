@@ -6,19 +6,19 @@
     <string>com.riadanas.whisperflow</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/riadanas/Desktop/Fable 5/VoiceBud-Local-Riad/.venv/bin/python</string>
+        <string>/Users/nilswieloch/Claude/VoiceBud-Local-Riad/.venv/bin/python</string>
         <string>-u</string>
         <string>main.py</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>/Users/riadanas/Desktop/Fable 5/VoiceBud-Local-Riad</string>
+    <string>/Users/nilswieloch/Claude/VoiceBud-Local-Riad</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/Users/riadanas/Library/Logs/whisperflow.log</string>
+    <string>/Users/nilswieloch/Library/Logs/whisperflow.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/riadanas/Library/Logs/whisperflow.log</string>
+    <string>/Users/nilswieloch/Library/Logs/whisperflow.log</string>
 </dict>
 </plist>

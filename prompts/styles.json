@@ -1,0 +1,12 @@
+{
+  "de": {
+    "doc": "Allgemeiner Text, zum Beispiel ein Dokument oder eine Notiz. Absätze nur bei längeren Texten.",
+    "mail": "Der Text kommt in eine E-Mail. Eine gesprochene Anrede steht allein in der ersten Zeile und endet mit Komma, danach folgt eine Leerzeile, und der Text geht kleingeschrieben weiter. Eine gesprochene Grußformel steht nach einer Leerzeile allein in einer Zeile, ein gesprochener Name darunter. Anrede, Gruß und Namen nie erfinden.",
+    "chat": "Der Text kommt in einen Chat. Kurz und locker lassen, keine Absätze, keine Anrede und keinen Gruß erfinden."
+  },
+  "en": {
+    "doc": "General text.",
+    "mail": "The text goes into an email. A spoken greeting stands alone on the first line and ends with a comma, followed by a blank line. A spoken sign-off stands alone on a line after a blank line, a spoken name below it. Never invent greetings, sign-offs or names.",
+    "chat": "The text goes into a chat. Keep it short and casual, no paragraphs, never invent a greeting or sign-off."
+  }
+}

@@ -3,3 +3,13 @@ __pycache__/
 .venv/
 .DS_Store
 *.log
+
+# build output (the DMG and the app built from this folder; GitHub takes no files over 100 MB)
+dist/
+ui/build/
+packaging/cache/
+*.dmg
+# private: a personal voice memo and its transcript (benchmark reference), and benchmark runs
+# that contain the dictated texts
+bakeoff/audio/
+tests/bench-results/

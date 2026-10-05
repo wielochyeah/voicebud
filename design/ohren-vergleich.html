@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notch-Ohren</title>
+<style>
+:root{--ink:#1d1d1f;--muted:#6e6e73;--board:#f3f2ef}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;background:var(--board);color:var(--ink);padding:36px 32px 48px;-webkit-font-smoothing:antialiased}
+h1{font:700 24px/1.2 -apple-system,"SF Pro Display",sans-serif;letter-spacing:-.02em}
+p.lead{color:var(--muted);font-size:14.5px;line-height:1.55;margin-top:8px;max-width:760px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:26px;max-width:980px}
+figure{background:#fff;border-radius:16px;padding:16px;box-shadow:0 0 0 .5px rgba(0,0,0,.08)}
+.scr{position:relative;height:200px;border-radius:10px;overflow:hidden;
+  background:radial-gradient(130% 170% at 20% 0%,#5a4bb0 0%,#2c2470 45%,#130f33 100%)}
+.bar{position:absolute;inset:0 0 auto 0;height:66px;background:rgba(255,255,255,.07)}
+/* everything drawn 3x enlarged so the corner is visible */
+.isl{position:absolute;top:0;left:50%;transform:translateX(-50%);width:300px;height:66px;background:#000;border-radius:0 0 30px 30px}
+.ears::before,.ears::after{content:"";position:absolute;top:0;width:22px;height:22px}
+.ears::before{left:-22px;background:radial-gradient(circle at 0 100%,transparent 21.5px,#000 22px)}
+.ears::after{right:-22px;background:radial-gradient(circle at 100% 100%,transparent 21.5px,#000 22px)}
+.loupe{position:absolute;top:-48px;width:96px;height:96px;border:2px solid #ff9f0a;border-radius:50%;pointer-events:none}
+figcaption{margin-top:12px;font-size:13.5px;line-height:1.5;color:var(--muted)}
+figcaption b{color:var(--ink)}
+</style>
+</head>
+<body>
+<h1>Was mit den „Ohren" gemeint ist</h1>
+<p class="lead">Beide Ausschnitte zeigen die Oberkante des Bildschirms dreifach vergrößert. Achte auf die markierten Stellen, an denen das Schwarz der Insel auf die Menüleiste trifft.</p>
+<div class="row">
+  <figure>
+    <div class="scr"><div class="bar"></div><div class="isl"></div><div class="loupe" style="left:calc(50% - 198px)"></div><div class="loupe" style="left:calc(50% + 102px)"></div></div>
+    <figcaption><b>So ist es gerade gebaut.</b> Die Insel stößt mit einer harten, eckigen Kante an die Menüleiste. Das wirkt wie ein aufgeklebtes schwarzes Rechteck.</figcaption>
+  </figure>
+  <figure>
+    <div class="scr"><div class="bar"></div><div class="isl ears"></div><div class="loupe" style="left:calc(50% - 198px)"></div><div class="loupe" style="left:calc(50% + 102px)"></div></div>
+    <figcaption><b>So soll es sein.</b> Oben links und rechts biegt sich die Kante weich nach außen in die Menüleiste. Die Insel wächst dadurch aus dem Bildschirmrand heraus, genau wie die echte Notch deines MacBooks und wie bei Alcove.</figcaption>
+  </figure>
+</div>
+</body>
+</html>

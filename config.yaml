@@ -1,35 +1,143 @@
 stt:
-  engine: faster-whisper      # faster-whisper | mlx-whisper (optional faster path)
-  model: tiny.en              # tiny.en | base | small | medium | large-v3
-  language: null              # null = auto-detect, or e.g. "en"
-  compute_type: int8          # int8 is fastest on CPU for CTranslate2
+  # benchmarked on this M1 Max (20s German clip):
+  #   mlx-whisper large-v3-turbo: 1.1s, flawless German  <- default
+  #   faster-whisper large-v3-turbo: 6.2s, flawless German (fallback)
+  #   faster-whisper small: 7.6s, garbles German fillers into fake words
+  engine: mlx-whisper         # mlx-whisper (Apple-GPU via MLX) | faster-whisper (CPU)
+  # bake-off 03.10.2026 on Nils' voice: turbo-q8 = same accuracy as turbo, 40% less RAM
+  model: large-v3-turbo-q8    # multilingual: base | small | medium | large-v3 | large-v3-turbo | large-v3-turbo-q8 (tiny.en/base.en = English only!)
+  language: null              # null = German or English only, German preferred on short takes; or force "de" / "en"
+  compute_type: int8          # faster-whisper only: int8 is fastest on CPU
+  # RAM: Whisper (~0.9 GB) loads on the hotkey press (hidden behind speaking) and is dropped
+  # after this many idle minutes. The hub setting "Modelle im RAM halten" (keepModelsLoaded in
+  # ~/Library/Application Support/VoiceBud/settings.json) keeps it loaded instead.
+  idle_unload_minutes: 10
 
 llm:
   enabled: true
-  # to change the LLM: edit llm.model below, then restart
-  model: qwen3:4b-instruct
-  base_url: http://localhost:11434
-  temperature: 0.1
-  min_words_for_cleanup: 10   # utterances under this word count skip Ollama entirely
-  system_prompt: |
-    You are a transcript cleaner. You receive raw speech-to-text output.
-    Your ONLY job: remove filler words (um, uh, like, you know), fix
-    capitalization, and fix punctuation. Output the cleaned text and NOTHING else.
-    NEVER rewrite, rephrase, translate, summarize, answer questions, or add
-    content. If the text is already clean, return it unchanged.
+  # Local LLM on the Apple GPU (MLX). LLM eval 03.10.2026 on 25 German/English cases incl. Nils'
+  # memo: Qwen3.5-4B 25/25 after the guards, ~0.3 s per take with the cached prompt.
+  # To change it: put another mlx-community repo here, download it once, restart.
+  model: mlx-community/Qwen3.5-4B-MLX-4bit
+  temperature: 0.0
+  # The model runs in its own process (llm_worker.py, ~2.4 GB while loaded). It starts while
+  # you speak and exits after this many idle minutes, so idle VoiceBud holds none of it.
+  # The hub setting "Modelle im RAM halten" (keepModelsLoaded) keeps it running instead.
+  idle_unload_minutes: 5
+  min_words_for_cleanup: 4        # shorter takes get only the fixed rules (commands, numbers)
+  min_words_to_wait_for_load: 10  # a model that is not loaded yet is waited for (~2 s) only from here
+  # The cleanup instructions live in prompts/ (clean_de.txt, clean_en.txt, styles.json per app style).
+  # prompt mode (second hotkey): rough spoken instruction -> structured AI prompt.
+  # small models imitate examples far better than they follow abstract rules,
+  # so each prompt carries one worked example. Kept to <=7 rules on purpose.
+  promptify_temperature: 0.2
+  promptify_system_prompt: |
+    You are a prompt engineer. You receive a rough spoken instruction for an AI
+    (raw speech-to-text, possibly with filler words). Rewrite it as a precise,
+    professional prompt ready to send to an AI.
+
+    Fill in this skeleton (omit a section if the instruction gives nothing for it):
+
+    Role: the expert role the AI should take.
+    Task: the goal — concrete and specific.
+    Context: background details from the instruction.
+    Requirements: bullet list of must-haves and constraints.
+    Format: desired shape, length, tone, audience of the answer.
+
+    Rules:
+    - Write the prompt in English.
+    - Use ONLY information from the instruction. Invent nothing — no reasons,
+      lengths, or details the speaker did not say.
+    - Mark missing key details (names, numbers, dates) as [placeholders] — at most 2.
+    - At most 5 requirements, each traceable to the instruction.
+    - If the instruction says nothing about format, write one short sensible
+      sentence for Format or omit the section.
+    - Produce ONLY the prompt — never perform or answer the task itself.
+    - Output the finished prompt and nothing else.
+
+    Example — instruction: "um write an email to our supplier that the invoice
+    was wrong like twice the amount and we want a corrected one by friday"
+    Output:
+    Role: You are an experienced, professional business correspondent.
+    Task: Write an email to our supplier pointing out that the invoice is
+    incorrect and requesting a corrected invoice by Friday.
+    Context: The invoice shows roughly twice the expected amount.
+    Requirements:
+    - State clearly that the invoiced amount is about double the expected amount
+    - Request a corrected invoice by Friday
+    - Address the supplier as [supplier name]
+    Format: A short, polite, professional email.
+  promptify_system_prompt_de: |
+    Du bist ein Experte für Prompt-Engineering. Du erhältst eine gesprochene,
+    grobe Anweisung an eine KI (aus Speech-to-Text, evtl. mit Füllwörtern).
+    Verwandle sie in einen präzisen, professionellen Prompt, den man direkt an
+    eine KI schicken kann.
+
+    Fülle dieses Skelett aus (lasse Abschnitte weg, für die die Anweisung nichts hergibt):
+
+    Rolle: Die Expertenrolle, die die KI einnehmen soll.
+    Aufgabe: Das Ziel — konkret und präzise.
+    Kontext: Hintergrund und Details aus der Anweisung.
+    Anforderungen: Aufzählung der Muss-Kriterien und Einschränkungen.
+    Format: Gewünschte Form, Länge, Ton und Zielgruppe der Antwort.
+
+    Regeln:
+    - Schreibe den Prompt auf Deutsch.
+    - Nutze NUR Informationen aus der Anweisung. Erfinde nichts — keine
+      Begründungen, Längenvorgaben oder Details, die der Sprecher nicht genannt hat.
+    - Markiere fehlende wichtige Details (Namen, Zahlen, Daten) als
+      [Platzhalter] — maximal 2.
+    - Maximal 5 Anforderungen, jede direkt aus der Anweisung ableitbar.
+    - Sagt die Anweisung nichts zum Format, schreibe bei Format nur einen kurzen
+      sinnvollen Satz oder lasse den Abschnitt weg.
+    - Erzeuge NUR den Prompt — führe die Aufgabe niemals selbst aus.
+    - Gib ausschließlich den fertigen Prompt aus, sonst nichts.
+
+    Beispiel — Anweisung: "ähm schreib mal ne mail an unseren lieferanten dass
+    die rechnung falsch war also doppelt so hoch und wir bis freitag ne
+    korrigierte brauchen"
+    Ausgabe:
+    Rolle: Du bist ein erfahrener, professioneller Geschäftskorrespondent.
+    Aufgabe: Schreibe eine E-Mail an unseren Lieferanten, die auf die fehlerhafte
+    Rechnung hinweist und bis Freitag eine korrigierte Rechnung anfordert.
+    Kontext: Die Rechnung ist etwa doppelt so hoch wie erwartet.
+    Anforderungen:
+    - Klar benennen, dass der Rechnungsbetrag etwa doppelt so hoch ist wie erwartet
+    - Korrigierte Rechnung bis Freitag anfordern
+    - Lieferant als [Name des Lieferanten] ansprechen
+    Format: Eine kurze, höfliche, professionelle E-Mail.
 
 hotkey:
   # single key (alt_r, ctrl_r, f13) or a chord like "ctrl+alt".
+  # plain names (ctrl, shift, alt, cmd) match LEFT or RIGHT key; _l/_r pin a side.
   # note: macOS does not let apps see the fn key, so fn cannot be used.
   key: ctrl+shift
   # hold = record while keys are held | toggle = press once to start, again to stop
   mode: toggle
 
+prompt_hotkey:
+  # second chord: speak an INSTRUCTION for an AI — instead of the raw transcript,
+  # a structured prompt (role, goal, context, requirements, format) is pasted.
+  # remove or comment out this section to disable prompt mode.
+  key: ctrl+alt
+  mode: toggle
+
+command_hotkey:
+  # Befehlsmodus: select text in any app, hold the chord and say what should happen
+  # ("mach das kürzer", "förmlicher", "übersetz ins Englische"). The result replaces the
+  # selection. Held, not toggled: ctrl+cmd+Q (lock screen) must never leave the mic running.
+  key: ctrl+cmd
+  mode: hold
+
 audio:
   sample_rate: 16000
   channels: 1
-  preroll_ms: 500             # ring buffer so the first word isn't clipped
+  # the mic is opened ONLY while recording (macOS mic indicator stays off
+  # otherwise) — allow ~100ms after pressing the hotkey before you speak
 
 inject:
   method: paste               # paste (clipboard + synthesized Cmd+V) | type (per-char CGEvent)
-  restore_clipboard: true
+  # false = the dictated text STAYS in the clipboard afterwards — if no text
+  # field was focused, just press Cmd+V wherever you want it. (true would
+  # restore the previous clipboard, but the dictation is lost on a miss.)
+  restore_clipboard: false

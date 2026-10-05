@@ -21,13 +21,13 @@ print(f"[1/4] audio loaded: {len(audio)/16000:.1f}s")
 # 2) STT
 t0 = time.time()
 stt = Transcriber(cfg["stt"])
-raw = stt.transcribe(audio)
-print(f'[2/4] STT ({time.time()-t0:.2f}s incl. model load): "{raw}"')
+raw, lang = stt.transcribe(audio)
+print(f'[2/4] STT ({time.time()-t0:.2f}s incl. model load, language={lang}): "{raw}"')
 
 # 3) LLM cleanup
 t0 = time.time()
 cleaner = Cleaner(cfg["llm"])
-cleaned = cleaner.clean(raw)
+cleaned = cleaner.clean(raw, lang)
 print(f'[3/4] cleanup via {cfg["llm"]["model"]} ({time.time()-t0:.2f}s): "{cleaned}"')
 
 # 4) injection: clipboard set + save/restore round-trip (keystroke needs a focused app)
