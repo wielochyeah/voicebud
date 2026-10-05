@@ -12,10 +12,6 @@ Everything here is plain string work, no model: it is tested in tests/test_formu
 import html as _html
 import re
 
-try:
-    from latex2mathml.converter import convert as _to_mathml
-except ImportError:          # an install without it: Word gets the readable characters instead
-    _to_mathml = None
 
 # -- the model's answer ----------------------------------------------------------------------------
 
@@ -279,10 +275,12 @@ def plain(md):
 # -- HTML with MathML (Word) -----------------------------------------------------------------------
 
 def _mathml(tex, display):
-    if _to_mathml is None:
+    try:      # imported on first use: the core's idle RAM stays where it was
+        from latex2mathml.converter import convert
+    except ImportError:      # an install without it: Word gets the readable characters instead
         return None
     try:
-        return _to_mathml(tex, display="block" if display else "inline")
+        return convert(tex, display="block" if display else "inline")
     except Exception:         # a construct it does not know: that formula as readable characters
         return None
 

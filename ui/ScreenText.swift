@@ -7,7 +7,7 @@
 // minutes; the UI itself stays inside its RAM budget. Needs the Screen Recording permission,
 // asked on first use.
 //
-// Formulas (05.10., Nils): a tap on ⌥ while the crosshair is out reads the region with the vision
+// Formulas (05.10., Nils): ⌥ pressed while the crosshair is out reads the region with the vision
 // part of the local model instead (core → llm_worker, formula.py): fractions, powers, roots and the
 // text around them. The clipboard gets LaTeX for chat apps, browsers and editors, real equations
 // (MathML) for Word, and readable characters (σ², √(x + 1)) for everything else.
@@ -69,10 +69,8 @@ final class ScreenText {
         dictationBusy || IPC.island?.showsDictationCard == true
     }
     private var pendingSince: Date?
-    /// ⌥ tapped while choosing (or held when the region was taken): read it as formulas
+    /// ⌥ pressed while choosing (or held when the region was taken): read it as formulas
     private var formula = false
-    private var optionDown = false
-    private var optionSince = Date.distantPast
     private var optionTimer: Timer?
     private var formulaID = 0
     private var formulaWaiting: (([String: Any]?) -> Void)?
@@ -225,7 +223,7 @@ final class ScreenText {
     private func captured(_ path: URL) {
         capture = nil
         selecting = false
-        let asFormula = formula || NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask) == .option
+        let asFormula = formula || NSEvent.modifierFlags.contains(.option)
         stopWatchingOption()
         IPC.island?.excludeFromCapture(false)
         guard FileManager.default.fileExists(atPath: path.path) else {
@@ -346,7 +344,6 @@ final class ScreenText {
     /// NSEvent's modifier state is read, not watched: no event monitor and no extra permission
     private func watchOption() {
         formula = false
-        optionDown = false
         state.ocrFormula = false
         optionTimer?.invalidate()
         let t = Timer(timeInterval: 0.04, repeats: true) { _ in
@@ -361,21 +358,15 @@ final class ScreenText {
         optionTimer = nil
     }
 
-    /// a tap: ⌥ alone, down and up again within 0.6 s
+    /// any press of ⌥ while choosing turns formulas on, and they stay on (05.10., Nils: a toggle
+    /// ended "off" after several taps; Esc is the way out, as always)
     private func pollOption() {
         guard selecting else { return stopWatchingOption() }
-        let flags = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if flags == .option {
-            if !optionDown { optionDown = true; optionSince = Date() }
-            return
-        }
-        if optionDown && flags.isEmpty && Date().timeIntervalSince(optionSince) < 0.6 {
-            formula.toggle()
-            state.ocrFormula = formula
-            if formula { IPC.send(["type": "formula_warm"]) }      // the model loads while the user drags
-            IPC.log("screen text: formulas \(formula ? "on" : "off")")
-        }
-        optionDown = false
+        guard !formula, NSEvent.modifierFlags.contains(.option) else { return }
+        formula = true
+        state.ocrFormula = true
+        IPC.send(["type": "formula_warm"])              // the model loads while the user drags
+        IPC.log("screen text: formulas on")
     }
 
     private func deliver(_ r: Result) {
