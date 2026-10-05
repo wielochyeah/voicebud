@@ -103,6 +103,10 @@ final class CoreAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let dictateHint = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let promptHint = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let commandHint = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let hubItem = NSMenuItem(title: "", action: #selector(CoreAppDelegate.showHub), keyEquivalent: ",")
+    private let probeItem = NSMenuItem(title: "", action: #selector(CoreAppDelegate.contextProbe), keyEquivalent: ",")
+    private let setupItem = NSMenuItem(title: "", action: #selector(CoreAppDelegate.showOnboarding), keyEquivalent: "")
+    private let quitItem = NSMenuItem(title: "", action: #selector(CoreAppDelegate.quit), keyEquivalent: "q")
     private var demo: DemoDriver?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -151,40 +155,41 @@ final class CoreAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         dictateHint.isEnabled = false
         promptHint.isEnabled = false
         commandHint.isEnabled = false
-        updateHints()
         menu.addItem(dictateHint)
         menu.addItem(promptHint)
         menu.addItem(commandHint)
         menu.addItem(.separator())
 
-        let hubItem = NSMenuItem(title: "Verlauf & Einstellungen …", action: #selector(showHub), keyEquivalent: ",")
         hubItem.target = self
         menu.addItem(hubItem)
         // hidden: holding ⌥ turns the row above into the Kontext-Probe (KONTEXT-PLAN.md)
-        let probeItem = NSMenuItem(title: "Kontext-Probe", action: #selector(contextProbe), keyEquivalent: ",")
         probeItem.keyEquivalentModifierMask = [.command, .option]
         probeItem.isAlternate = true
         probeItem.target = self
         menu.addItem(probeItem)
-        let setupItem = NSMenuItem(title: "Einrichtung …", action: #selector(showOnboarding), keyEquivalent: "")
         setupItem.target = self
         menu.addItem(setupItem)
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "VoiceBud beenden", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
+        updateMenu()
     }
 
-    /// Hotkeys arrive with `hello`; the hint rows are refreshed whenever the menu opens.
-    func menuNeedsUpdate(_ menu: NSMenu) { updateHints() }
+    /// Hotkeys arrive with `hello` and the language can change in the hub: every title is set
+    /// again whenever the menu opens.
+    func menuNeedsUpdate(_ menu: NSMenu) { updateMenu() }
 
-    private func updateHints() {
+    private func updateMenu() {
         let keys = state?.hotkeys ?? [:]
-        dictateHint.title = "Diktat: " + HotkeyFormat.display(keys["dictate"] ?? "ctrl+shift")
-        promptHint.title = "Prompt: " + HotkeyFormat.display(keys["prompt"] ?? "ctrl+alt")
-        commandHint.title = "Befehl (halten): " + HotkeyFormat.display(keys["command"] ?? "ctrl+cmd")
+        dictateHint.title = L("Diktat: %@", HotkeyFormat.display(keys["dictate"] ?? "ctrl+shift"))
+        promptHint.title = L("Prompt: %@", HotkeyFormat.display(keys["prompt"] ?? "ctrl+alt"))
+        commandHint.title = L("Befehl (halten): %@", HotkeyFormat.display(keys["command"] ?? "ctrl+cmd"))
         commandHint.isHidden = keys["command"] == nil
+        hubItem.title = L("Verlauf & Einstellungen …")
+        probeItem.title = L("Kontext-Probe")
+        setupItem.title = L("Einrichtung …")
+        quitItem.title = L("VoiceBud beenden")
     }
 
     @objc private func showHub() { hub.show() }

@@ -57,7 +57,7 @@ final class MenuBarIcon {
         if OutputMute.isMuted { parts.append(Self.symbol("speaker.slash.fill", ink)) }
         button.image = Self.row(parts)
         item.length = NSStatusItem.variableLength
-        button.toolTip = OutputMute.isMuted ? "VoiceBud nimmt auf, Ton stumm" : "VoiceBud nimmt auf"
+        button.toolTip = OutputMute.isMuted ? L("VoiceBud nimmt auf, Ton stumm") : L("VoiceBud nimmt auf")
     }
 
     private func startTimer() {

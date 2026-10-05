@@ -255,14 +255,14 @@ enum AlcoveProbe {
 }
 
 enum HotkeyFormat {
-    /// "ctrl+shift" → "⌃⇧", "alt_r" → "⌥ rechts", "f13" → "F13" (macOS modifier order ⌃⌥⇧⌘).
+    /// "ctrl+shift" → "⌃⇧", "alt_r" → "⌥ rechts" ("⌥ right"), "f13" → "F13" (macOS modifier order ⌃⌥⇧⌘).
     static func display(_ spec: String) -> String {
         let order = ["ctrl": 0, "alt": 1, "shift": 2, "cmd": 3]
         let glyph = ["ctrl": "⌃", "alt": "⌥", "shift": "⇧", "cmd": "⌘"]
         var parts: [(rank: Int, text: String, sided: Bool)] = []
         for raw in spec.lowercased().split(separator: "+") {
             let name = raw.trimmingCharacters(in: .whitespaces)
-            let side = name.hasSuffix("_l") ? " links" : name.hasSuffix("_r") ? " rechts" : ""
+            let side = name.hasSuffix("_l") ? " " + L("links") : name.hasSuffix("_r") ? " " + L("rechts") : ""
             let base = side.isEmpty ? name : String(name.dropLast(2))
             if let g = glyph[base] {
                 parts.append((order[base] ?? 9, g + side, !side.isEmpty))

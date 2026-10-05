@@ -263,6 +263,8 @@ enum IPC {
                 })
             state.errorMessage = nil
         case .error:
+            // German as the core sent it (traces keep it); the island shows it translated, so a
+            // card on screen also follows a language switch (IslandCopy.message)
             state.errorMessage = (msg["message"] as? String) ?? "Fehler"
         case .processing:
             state.errorMessage = nil

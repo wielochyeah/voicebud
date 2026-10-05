@@ -320,7 +320,9 @@ final class ScreenText {
         return lineApps.contains(id) || id.hasPrefix("com.jetbrains.") || id.hasPrefix("com.google.android.studio")
     }
 
-    /// the island, through the same path as the core's messages
+    /// the island, through the same path as the core's messages. Messages and the table count stay
+    /// German here, like the core's: the island translates them where it shows them
+    /// (IslandCopy.message, Strings+Island).
     private func show(_ msg: [String: Any]) {
         IPC.apply(msg)
     }
