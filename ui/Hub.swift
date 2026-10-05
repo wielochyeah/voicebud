@@ -1106,6 +1106,8 @@ struct HubChip: View {
     let title: String
     var symbol: String?
     var active = false
+    /// a light tick on Force Touch trackpads when the pointer comes onto it (05.10., Nils)
+    var haptic = false
     let action: () -> Void
     @Environment(\.colorScheme) private var scheme
 
@@ -1124,6 +1126,9 @@ struct HubChip: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(HubPressStyle())
+        .onHover { inside in
+            if inside && haptic { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }
+        }
     }
 }
 
@@ -1346,9 +1351,26 @@ struct HubHistoryRow: View {
     @Environment(\.colorScheme) private var scheme
 
     private var text: String { entry.final.isEmpty ? entry.raw : entry.final }
-    /// more than the two lines a closed row shows (a rough measure: long, or several lines)
-    private var long: Bool { text.count > 150 || text.contains("\n") }
+    /// heights of the text in full and in the closed row's two lines, at the row's width: only
+    /// a row whose text is really cut can open (05.10., Nils: no Aufklappen with nothing to show)
+    @State private var fullHeight: CGFloat = 0
+    @State private var twoLineHeight: CGFloat = 0
+    private var long: Bool { fullHeight > twoLineHeight + 1 }
     private var open: Bool { opened || expanded }
+    private func measure(lines: Int?, _ done: @escaping (CGFloat) -> Void) -> some View {
+        Text(text)
+            .font(.system(size: 13.5))
+            .lineSpacing(2.5)
+            .lineLimit(lines)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(GeometryReader { g in
+                Color.clear
+                    .onAppear { done(g.size.height) }
+                    .onChange(of: g.size.height) { _, h in done(h) }
+            })
+    }
+
     /// a Markdown table with its cells padded to the column widths (for showing only; copying
     /// keeps the Markdown that chat apps read)
     static func aligned(_ text: String) -> String {
@@ -1401,6 +1423,14 @@ struct HubHistoryRow: View {
                     .lineLimit(open ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(alignment: .topLeading) {
+                        // the same text twice, unseen, at the same width: in full and in two lines
+                        ZStack(alignment: .topLeading) {
+                            measure(lines: nil) { fullHeight = $0 }
+                            measure(lines: 2) { twoLineHeight = $0 }
+                        }
+                        .hidden()
+                    }
                 // No middle dots (SPEC §0): the facts are separated by spacing alone.
                 HStack(spacing: 10) {
                     HubModeBadge(mode: entry.mode, formula: entry.lang == "formula")
@@ -1417,9 +1447,9 @@ struct HubHistoryRow: View {
                 }
             }
             HStack(spacing: 4) {
-                HubChip(title: copied ? L("Kopiert") : L("Kopieren"), symbol: copied ? "checkmark" : nil, action: onCopy)
-                if long { HubChip(title: open ? L("Zuklappen") : L("Aufklappen"), active: open, action: onOpen) }
-                if hasOriginal { HubChip(title: L("Original"), active: expanded, action: onOriginal) }
+                HubChip(title: copied ? L("Kopiert") : L("Kopieren"), symbol: copied ? "checkmark" : nil, haptic: true, action: onCopy)
+                if long { HubChip(title: open ? L("Zuklappen") : L("Aufklappen"), active: open, haptic: true, action: onOpen) }
+                if hasOriginal { HubChip(title: L("Original"), active: expanded, haptic: true, action: onOriginal) }
             }
             .opacity(hovered || open ? 1 : 0)
             .animation(.easeOut(duration: 0.15), value: hovered)

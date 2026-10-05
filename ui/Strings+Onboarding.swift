@@ -202,6 +202,8 @@ extension Loc {
         "Kürzel": "Snippets",
         "Aus „meine Signatur“ wird der ganze Text.": "“My signature” turns into the full text.",
         "⇧⌘2 drücken, für Formeln ⌥ antippen, aufziehen.": "Press ⇧⌘2, tap ⌥ for formulas, then drag.",
+        "Für Formeln in Word fragt macOS einmal, ob VoiceBud dort die Schrift ablesen darf.":
+            "For formulas in Word, macOS asks once whether VoiceBud may read the font there.",
         "Verlauf und Einstellungen": "History and settings",
         "Klick auf das Mikrofon in der Menüleiste.": "Click the microphone in the menu bar.",
     ]

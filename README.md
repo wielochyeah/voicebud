@@ -11,6 +11,8 @@ Press `ctrl+shift` in any app → speak → press again → clean text appears a
 
 Built with Claude Code (planned with Opus 4.8, built with Fable 5).
 
+**Permissions:** Microphone, Input Monitoring (the hotkeys) and Accessibility (pasting, screen context), asked step by step in the setup window. Screen Recording for the text recognition and, optionally, Automation for Microsoft Word (font of formulas) are asked the first time you use them. Everything runs on your Mac.
+
 The interface is in English or German: it follows your Mac's language until you pick one. Dictation works in German and English, and in a mix of both.
 
 ## A tour

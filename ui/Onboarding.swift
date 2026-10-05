@@ -2436,7 +2436,10 @@ struct OnboardingScreenText: View {
             return L("Schalte %@ ein.\nDie Freigabe greift nach dem Neustart, den VoiceBud am Ende macht.", where_)
         }
         let privacy = L("Das Bild bleibt auf deinem Mac und wird gleich gelöscht, der Text kommt in den Verlauf.")
-        return model.screenTextGranted ? privacy : L("Optional, geht auch später beim ersten ⇧⌘2.") + "\n" + privacy
+        // the one permission asked later, only by whoever pastes formulas into Word (05.10.)
+        let word = L("Für Formeln in Word fragt macOS einmal, ob VoiceBud dort die Schrift ablesen darf.")
+        return model.screenTextGranted ? privacy + "\n" + word
+            : L("Optional, geht auch später beim ersten ⇧⌘2.") + "\n" + privacy + "\n" + word
     }
 }
 

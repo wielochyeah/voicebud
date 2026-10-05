@@ -51,8 +51,13 @@ python main.py
 macOS will block the app until you allow it. In **System Settings → Privacy & Security**, add your Python binary to:
 
 - **Input Monitoring** — lets the app see the global hotkey
-- **Accessibility** — lets it paste text into other apps
+- **Accessibility** — lets it paste text into other apps and read the screen context
 - **Microphone** — macOS asks automatically on your first recording; click Allow
+
+The setup window walks you through these. Two more are asked when you first need them:
+
+- **Screen Recording** — for the text recognition (`shift+cmd+2`); the image never leaves your Mac and is deleted right away
+- **Automation for Microsoft Word** (optional) — when you paste formulas into Word, VoiceBud asks Word for the font name and size at your cursor, nothing else; it can be switched off in the hub under Text Recognition
 
 Tip: the settings file picker hides dot-folders. Press `⌘⇧G` in the picker and paste the path printed by `readlink -f .venv/bin/python`, or reveal it with `open -R "$(readlink -f .venv/bin/python)"` and drag the file into the list. Restart the app after granting.
 
