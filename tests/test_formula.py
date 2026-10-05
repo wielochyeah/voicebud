@@ -80,6 +80,16 @@ class FormulaTests(unittest.TestCase):
         self.assertEqual(r["html"].count("<math"), 1)
         self.assertEqual(f.plain(r"Der Barwert $PV = \$100 \cdot (1+r)^{-n}$ gilt."), "Der Barwert PV = $100 · (1+r)⁻ⁿ gilt.")
 
+    def test_environments_read_as_rows(self):
+        self.assertEqual(f.latex_to_text(r"\begin{aligned} a &= b + c \\ d &= e \end{aligned}"), "a = b + c; d = e")
+        self.assertEqual(f.latex_to_text(r"\begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix}"), "[1, 2; 3, 4]")
+        self.assertTrue(f.latex_to_text(r"f(x) = \begin{cases} x^2 & x \ge 0 \\ -x & \text{sonst} \end{cases}").startswith("f(x) = {x² x ≥ 0;"))
+
+    def test_heading_followed_by_text_is_a_heading_in_word(self):
+        h = f.html("## Satz 1\nFür alle $x$ gilt das.")
+        self.assertIn("<h3>Satz 1</h3>", h)
+        self.assertNotIn("##", h)
+
     def test_renditions(self):
         r = f.renditions(BLOCK)
         self.assertEqual(set(r), {"markdown", "plain", "html"})

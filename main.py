@@ -371,8 +371,8 @@ class VoiceBud:
         if self.owner is not None or self._closing:
             return  # the other hotkey is recording — ignore
         ptt = self.ptts.get(mode)
-        if (ptt is None or ptt.mode == "toggle") and self._cancel_slow():
-            return  # this press cancelled the take the island offered to cancel
+        if mode == "dictate" and (ptt is None or ptt.mode == "toggle") and self._cancel_slow():
+            return  # this press cancelled the take the island offered to cancel (the island names ⌃⇧)
         if self._metering:
             self.mic_meter(False)  # the test dictation takes over the microphone
         self.learner.cancel()      # the last paste is being worked on (command mode) or left behind
@@ -434,7 +434,8 @@ class VoiceBud:
         stops right away when nothing is selected."""
         try:
             if mode == "command":
-                snap = context.capture(context.CURSOR, self._own_pids())
+                # the selection only: never the whole window of a chat app (0.25 s per command)
+                snap = context.capture(context.CURSOR, self._own_pids(), cap=context.CURSOR)
             else:
                 snap = context.capture(self.settings.get("contextLevel", 2), self._own_pids(),
                                        self.settings.get("contextApps"))
@@ -673,13 +674,22 @@ class VoiceBud:
         seq = self._shown_seq if self.ui.headless else self._hint_seq
         with self._busy_lock:
             entry = self._processing.get(seq) if seq is not None else None
-        if entry is None or time.monotonic() - entry[0] < entry[2] - 0.5:
-            return False
+            if entry is None or time.monotonic() - entry[0] < entry[2] - 0.5:
+                return False
+            # the takes queued ahead of it go too (review 05.10.: a short take waiting behind a
+            # long one was the one offered; the long one then still pasted after "nichts
+            # eingefügt"). Marked inside the lock: _process passes its point of no return there.
+            gone = sorted(s for s in self._processing if s <= seq)
+            self._cancelled.update(gone)
         mode = entry[1]
-        self._cancelled.add(seq)
         raw = self._raw.get(seq)
-        print(f"take {seq} cancelled by the user after {time.monotonic() - entry[0]:.0f} s")
-        self.cleaner.cancel_take(seq)
+        print(f"take {seq} cancelled by the user after {time.monotonic() - entry[0]:.0f} s"
+              + (f" (with {len(gone) - 1} queued ahead)" if len(gone) > 1 else ""))
+        for s in gone:
+            self.cleaner.cancel_take(s)
+            spec = self._spec_llm.get(s)       # a cleanup computed ahead that the take waits for
+            if spec is not None:
+                self.cleaner.cancel(spec["ticket"])
         message = "Abgebrochen, nichts eingefügt"
         if raw:
             try:
@@ -691,6 +701,16 @@ class VoiceBud:
             if self.owner is None:
                 self.ui.state("error", mode, message=message, tone="ok")
         return True
+
+    def _cancelled_or_committed(self, seq):
+        """True when the take was cancelled; else it is committed to its paste: from here on a
+        press of the hotkey cancels nothing of it (it leaves _processing under the same lock that
+        _cancel_slow marks under, so a cancel is either before this or not at all)."""
+        with self._busy_lock:
+            if seq in self._cancelled:
+                return True
+            self._processing.pop(seq, None)
+            return False
 
     def _drop_ctx(self, seq):
         """The take's screen context leaves RAM (empty, failed and cancelled takes too), and a
@@ -762,7 +782,8 @@ class VoiceBud:
         """Paste into the app that was in front at the stop. When another app is in front by
         now, the text only goes to the clipboard (the card says so) instead of landing there."""
         front = context.frontmost(self._own_pids())
-        if pid and front is not None and front["pid"] != pid:
+        # (None: VoiceBud itself in front, e.g. the hub opened meanwhile; Cmd+V would land there)
+        if pid and (front is None or front["pid"] != pid):
             inject.copy_only(text)
             return "clipboard"
         target = paste_target(self._own_pids())
@@ -771,9 +792,10 @@ class VoiceBud:
 
     def _take_context(self, seq, pid):
         """The snapshot of this take, or None. Dropped when another app is in front by now."""
-        thread = self._ctx_threads.pop(seq, None)
+        thread = self._ctx_threads.get(seq)
         if thread is not None:
-            thread.join(0.5)
+            thread.join(0.5)           # (still registered while it runs: what it finds is kept)
+        self._ctx_threads.pop(seq, None)
         snap = self._ctx.pop(seq, None)
         if snap is None:
             return None
@@ -953,7 +975,7 @@ class VoiceBud:
             if snap is not None:
                 snap.clear()
             t_llm = time.time()
-            if seq in self._cancelled:
+            if self._cancelled_or_committed(seq):
                 self._keep_cancelled(seq, mode, app, t_stop, res, final=stored)
                 return
             if to_clipboard or self._closing:
@@ -1025,13 +1047,13 @@ class VoiceBud:
         source = dictionary.spell_fix(selection) if PROOFREAD.search(instruction) else selection
         result = self.cleaner.command(instruction, source, res.lang)
         snap.clear()
+        if self._cancelled_or_committed(seq):
+            print("(cancelled take: nothing pasted)")
+            return
         if not result:
             self._show(seq, "error", "command", message="Befehl nicht ausgeführt, Text unverändert")
             return
         t_llm = time.time()
-        if seq in self._cancelled:
-            print("(cancelled take: nothing pasted)")
-            return
         if to_clipboard or self._closing:
             inject.copy_only(result)
             target = "clipboard"
@@ -1061,7 +1083,8 @@ class VoiceBud:
             text, source = snap.selected, "Markierter Text"
         elif DEICTIC.search(instruction):
             app = {"bundle": snap.bundle, "path": ""}
-            window_ok = context.effective_level(context.WINDOW, app, self.settings.get("contextApps"))[0] >= context.WINDOW
+            window_ok = snap.level >= context.CURSOR and \
+                context.effective_level(context.WINDOW, app, self.settings.get("contextApps"))[0] >= context.WINDOW
             # the open mail or page first, not the inbox list around it
             text = (context.main_text(snap.pid) or snap.window or context.window_text(snap.pid)) if window_ok else ""
             source = "Fenstertext"

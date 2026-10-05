@@ -149,7 +149,7 @@ class Onboarding:
         g = grants()
         restart = self._initial_input != "granted" and g["inputMonitoring"] == "granted"
         return {"type": "onboarding_state", "grants": g, "models": self.model_rows(), "restart": restart,
-                "tcc": "VoiceBud" if is_bundled() else "Python", "mic": mic_name()}
+                "tcc": "VoiceBud" if is_bundled() else "Python", "mic": mic_name(), "login": self.login_status()}
 
     def send_state(self, force=True):
         st = self.state()
@@ -179,8 +179,9 @@ class Onboarding:
         elif action == "restart":
             self.restart()
         elif action == "finish":
-            if msg.get("login"):
-                self.login_item(True)
+            # the switch both ways (review 05.10.: off was ignored, VoiceBud still started at login)
+            if "login" in msg and bool(msg.get("login")) != self.login_status():
+                self.login_item(bool(msg.get("login")))
             self.watch(False)
 
     def request(self, which):
@@ -304,6 +305,18 @@ class Onboarding:
                           f'/usr/bin/open "{app_path()}"'], start_new_session=True,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.vb.request_quit()
+
+    @staticmethod
+    def login_status():
+        """Whether VoiceBud starts at login now (SMAppService; the dev run never does)."""
+        if not is_bundled():
+            return False
+        try:
+            import objc
+            objc.loadBundle("ServiceManagement", {}, bundle_path="/System/Library/Frameworks/ServiceManagement.framework")
+            return int(objc.lookUpClass("SMAppService").mainAppService().status()) == 1   # enabled
+        except Exception:
+            return False
 
     @staticmethod
     def login_item(on):

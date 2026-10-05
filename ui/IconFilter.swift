@@ -59,6 +59,8 @@ func inkRuns(_ img: CGImage, _ box: CGRect) -> (runs: [InkRun], lineH: Int) {
 final class IconFilter {
     let img: CGImage
     let on: Bool
+    /// medWord comes from real words of the picture (else it is a guess and the height rule is off)
+    var measured = false
     var medWord = 1.0, textChroma = 0.0, hasCJK = false
     var cache: [CGRect: (runs: [InkRun], lineH: Int)] = [:]
 
@@ -88,7 +90,7 @@ final class IconFilter {
             let r = runs(b)
             for run in r.runs where run.x1 - run.x0 > 2 * (run.y1 - run.y0) { heights.append(run.y1 - run.y0); chromas.append(run.chroma) }
         }
-        if !heights.isEmpty { medWord = Double(heights.sorted()[heights.count / 2]) }
+        if !heights.isEmpty { medWord = Double(heights.sorted()[heights.count / 2]); measured = true }
         if !chromas.isEmpty { textChroma = chromas.sorted()[chromas.count / 2] }
         hasCJK = transcripts.contains { $0.unicodeScalars.filter(Self.isCJK).count >= 5 }
         OCRHelper.iconMs += Int(Date().timeIntervalSince(t0) * 1000)
@@ -110,7 +112,10 @@ final class IconFilter {
         let w0 = Double(r0.x1 - r0.x0) / medWord, h0 = Double(r0.y1 - r0.y0) / medWord
         guard w0 < 3 else { return false }                                       // first run is the word itself
         let rest = rs.dropFirst().map(\.chroma).reduce(0, +) / Double(rs.count - 1)
-        if r0.chroma >= 60 && rest <= 30 { return true }
+        // a coloured first word is an icon only when it is not a word: Xcode colours "if", "fn",
+        // "do", git colours "M" (review 05.10.: they were dropped); a coloured icon of word size
+        // read as letters stays, as before the filter
+        if r0.chroma >= 60 && rest <= 30 && (!tok.allSatisfy(\.isLetter) || h0 >= 1.1) { return true }
         let gap = Double(rs[1].x0 - r0.x1) / Double(lh)
         return h0 >= 1.1 && w0 >= 1.1 && gap >= 0.45
     }
@@ -120,12 +125,16 @@ final class IconFilter {
         let scalars = tok.unicodeScalars
         let cjk = scalars.filter(Self.isCJK).count
         if cjk > 0 && cjk >= scalars.count - 1 && scalars.count <= 4 && !hasCJK { return true }
-        guard tok.count <= 2, !Self.isEnumerator(tok), !tok.allSatisfy(\.isNumber) else { return false }
+        // (a digit is never an icon: "5€", "Q3", "7%" on a slide; review 05.10.)
+        guard tok.count <= 2, !Self.isEnumerator(tok), !tok.contains(where: \.isNumber) else { return false }
         let (rs, _) = runs(box)
         guard let f = rs.first else { return false }
         let u = rs.dropFirst().reduce(f) { InkRun(x0: min($0.x0, $1.x0), x1: max($0.x1, $1.x1), y0: min($0.y0, $1.y0), y1: max($0.y1, $1.y1), chroma: max($0.chroma, $1.chroma)) }
-        if u.chroma >= 60 && textChroma <= 30 { return true }
-        return Double(u.y1 - u.y0) / medWord >= 1.8
+        let height = Double(u.y1 - u.y0) / medWord
+        if u.chroma >= 60 && textChroma <= 30 && (!tok.allSatisfy(\.isLetter) || (measured && height >= 1.1)) { return true }
+        // the height rule needs a measured word height: a picture of just "Ja" or "OK" has none,
+        // and every glyph then looked twice too tall (review 05.10.: "Kein Text gefunden")
+        return measured && height >= 1.8
     }
 
     @available(macOS 26.0, *)

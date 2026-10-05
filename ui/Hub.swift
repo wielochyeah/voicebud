@@ -55,6 +55,11 @@ final class HubController: NSObject, NSWindowDelegate {
         if headless || window?.isVisible == true { model.reloadHistory(keepCount: true) }
     }
 
+    /// back from the Dock or from behind other windows: what was dictated meanwhile shows up
+    /// (review 05.10.: a hidden hub never reloaded)
+    func windowDidBecomeKey(_ notification: Notification) { model?.reloadHistory(keepCount: true) }
+    func windowDidDeminiaturize(_ notification: Notification) { model?.reloadHistory(keepCount: true) }
+
     func windowWillClose(_ notification: Notification) {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
@@ -67,6 +72,10 @@ final class HubController: NSObject, NSWindowDelegate {
             closing?.setFrameAutosaveName("")
             closing?.contentViewController = nil
             closing?.delegate = nil
+            if self.window == nil { self.model = nil }   // the lists too, unless reopened meanwhile
+            // and hand the freed memory back: without this the UI stayed at ~50 MB after the hub
+            // was open once (review 05.10., budget 30 MB)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { malloc_zone_pressure_relief(nil, 0) }
         }
         NSApp.setActivationPolicy(.accessory)
         handBackActivation()
@@ -272,7 +281,10 @@ final class HubModel {
     func reloadAll() {
         reloadHistory()
         loadTerms()
+        dictionaryVersion += 1
     }
+    /// bumped when the core changed the dictionary (the learned list reads it again)
+    var dictionaryVersion = 0
 
     // MARK: History
 
@@ -283,7 +295,7 @@ final class HubModel {
     }
 
     func focusSearch() {
-        pane = .verlauf
+        if pane != .texterkennung { pane = .verlauf }      // ⌘F in Erkannte Texte searches there
         searchFocusPending = true
     }
 
@@ -1150,7 +1162,8 @@ struct HubHistoryPane: View {
         let t = HubTheme(scheme)
         VStack(spacing: 0) {
             HubPaneHeader(pane: model.ocrPane ? .texterkennung : .verlauf) { searchField(t) }
-            if model.query.isEmpty ? model.totalCount > 0 : !model.entries.isEmpty { statsLine(t) }
+            // (dictation figures: not above the recognized texts)
+            if !model.ocrPane && (model.query.isEmpty ? model.totalCount > 0 : !model.entries.isEmpty) { statsLine(t) }
             if model.entries.isEmpty {
                 emptyState(t)
             } else {
@@ -1313,9 +1326,9 @@ struct HubHistoryPane: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(t.fg)
                 HStack(spacing: 6) {
-                    Text(L("Halte"))
+                    Text(L("Drück"))
                     HubKeyCaps(keys: HubFormat.hotkey(model.state.hotkeys["dictate"] ?? "ctrl+shift"))
-                    Text(L("gedrückt, sprich und lass los."))
+                    Text(L(", sprich und drück noch einmal."))
                 }
                 .font(.system(size: 12.5))
                 .foregroundStyle(t.fg2)
@@ -1643,6 +1656,7 @@ struct HubDictionaryPane: View {
         }
         .onAppear(perform: loadLearned)
         .onChange(of: model.terms) { loadLearned() }
+        .onChange(of: model.dictionaryVersion) { loadLearned() }   // a phrase fix leaves the terms as they are
     }
 
     @State private var learned: [String: String] = [:]
@@ -1810,7 +1824,7 @@ struct HubIslandPane: View {
             : L("Wächst seitlich aus der Notch. Nach dem Einfügen klappt sie kurz auf und bestätigt.")
         let live: String
         if !liveText {
-            live = L("Ohne Live-Text erkennt VoiceBud erst nach dem Loslassen.")
+            live = L("Ohne Live-Text erkennt VoiceBud erst nach dem Ende der Aufnahme.")
         } else if shape == .kapsel {
             live = L("Mit Live-Text hängt beim Sprechen eine Karte mit deinem Text darunter.")
         } else {
@@ -2755,7 +2769,23 @@ enum HubContextCopy {
         }
     }
 
-    static var perApp: [(value: Int, title: String)] { [(0, L("Aus")), (2, L("Cursor")), (3, L("Fenster"))] }
+    static var perApp: [(value: Int, title: String)] {
+        [(0, L("Aus")), (1, L("App")), (2, L("Cursor")), (3, L("Fenster"))]
+    }
+
+    /// same list as context.NO_PRIVATE_SIGNAL: browsers read at most the text at the cursor
+    static let cursorAtMost: Set<String> = ["com.apple.safari", "com.google.chrome", "com.microsoft.edgemac",
+        "company.thebrowser.browser", "company.thebrowser.dia", "com.brave.browser", "com.operasoftware.opera"]
+
+    static func options(_ bundle: String) -> [(value: Int, title: String)] {
+        cursorAtMost.contains(bundle.lowercased()) ? perApp.filter { $0.value <= 2 } : perApp
+    }
+
+    /// what the core applies: an own choice or the standard, browsers capped at the cursor
+    static func applied(_ bundle: String, own: Int?, base: Int) -> Int {
+        let level = own ?? standard(bundle, base: base)
+        return cursorAtMost.contains(bundle.lowercased()) ? min(level, 2) : level
+    }
 
     /// same list as context.DEFAULT_APP_LEVELS: chats and AI chats read the whole window
     static let windowByDefault = ["com.tinyspeck.slackmacgap", "com.microsoft.teams2", "com.microsoft.teams",
@@ -2856,7 +2886,7 @@ struct HubFormulaApps: View {
     /// messengers (05.10., Nils missed WhatsApp). Only the installed ones are listed; every other
     /// app gets its standard and can be added.
     static let usual = [
-        "com.microsoft.Word", "com.apple.iWork.Pages", "com.apple.Notes", "com.apple.mail", "com.apple.TextEdit",
+        "com.microsoft.Word", "com.apple.Pages", "com.apple.iWork.Pages", "com.apple.Notes", "com.apple.mail", "com.apple.TextEdit",
         "com.anthropic.claudefordesktop", "com.openai.chat", "ai.perplexity.mac",
         "com.apple.Safari", "com.google.Chrome", "company.thebrowser.Browser", "company.thebrowser.dia",
         "org.mozilla.firefox", "com.microsoft.edgemac", "com.brave.Browser",
@@ -2984,9 +3014,9 @@ struct HubContextPane: View {
                                         .font(.system(size: 12.5))
                                         .foregroundStyle(t.fg2)
                                 }
-                                let current = s.contextApps[bundle] ?? HubContextCopy.standard(bundle, base: s.contextLevel)
+                                let current = HubContextCopy.applied(bundle, own: s.contextApps[bundle], base: s.contextLevel)
                                 HStack(spacing: 4) {
-                                    ForEach(HubContextCopy.perApp, id: \.value) { option in
+                                    ForEach(HubContextCopy.options(bundle), id: \.value) { option in
                                         HubChip(title: option.title, active: current == option.value) {
                                             model.update { $0.contextApps[bundle] = option.value }
                                         }

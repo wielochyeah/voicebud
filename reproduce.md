@@ -39,12 +39,21 @@ pip install -r requirements.txt
 pip install --no-deps mlx-vlm==0.7.4
 ```
 
-## 3. Run it
+## 3. Build the interface and run it
+
+The island, the hub and the setup window are a small Swift app (`ui/`). It needs Apple's command
+line tools once (`xcode-select --install`, if you do not have them yet):
 
 ```bash
-# Start the app (first run downloads the ~75 MB Whisper speech model automatically)
+# Build the Swift interface (ui/build/VoiceBudUI)
+zsh ui/build.sh
+
+# Start the app: the setup window opens and downloads the speech model (~0.9 GB)
+# and the language model (~3 GB) once
 python main.py
 ```
+
+Or build the whole `VoiceBud.app` into /Applications with `zsh make-app.sh`.
 
 ## 4. Grant permissions (one time)
 
@@ -65,7 +74,7 @@ Tip: the settings file picker hides dot-folders. Press `⌘⇧G` in the picker a
 
 Click into any text field (Notes, browser, Slack, anywhere):
 
-1. Press `ctrl+shift` → a small waveform pill appears (recording)
+1. Press `ctrl+shift` → the island grows out of the notch (or a capsule appears below the menu bar) and records
 2. Speak naturally — ums and uhs are fine, they get removed
 3. Press `ctrl+shift` again → your cleaned text is pasted at the cursor
 

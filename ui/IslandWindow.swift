@@ -175,7 +175,8 @@ final class IslandController {
                     self.update { self.model.slowHint = true }
                     // the core cancels only a take the island offers to cancel: the notch card or
                     // the capsule shows "⌃⇧ bricht ab" (live text has no room for it)
-                    if self.state.mode != .ocr && (self.model.kind == .capsule || self.model.flavour != .live) {
+                    // (not while hidden in full screen: the user never saw the offer)
+                    if self.state.mode != .ocr && !self.suppressed && (self.model.kind == .capsule || self.model.flavour != .live) {
                         IPC.send(["type": "slow_hint"])
                     }
                 }
@@ -204,7 +205,7 @@ final class IslandController {
             if !waiting { beginTake(at: .recording) }
             if state.mode != .ocr {          // choosing a region for Texterkennung records nothing
                 playSound("Tink")
-                OutputMute.begin(state.settings)
+                if !headless { OutputMute.begin(state.settings) }    // tests never mute the real speakers
             }
         case .processing:
             if endedRecording { playSound("Pop") }

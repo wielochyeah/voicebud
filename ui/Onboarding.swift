@@ -149,6 +149,8 @@ final class OnboardingModel {
     var alcove: AlcoveChoice = .auto
     var context: ContextLevel = .cursor
     var launchAtLogin = true
+    /// launchAtLogin was set from the core's status (onboarding_state "login")
+    var loginRead = false
     /// second step (05.10.): the app's texts (as macOS until chosen) and the dictation language
     var uiLanguage: UILanguage = .system
     var dictationLanguage: DictationLanguage = .auto

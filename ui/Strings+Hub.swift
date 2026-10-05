@@ -42,8 +42,8 @@ extension Loc {
         "Noch keine erkannten Texte": "No recognized text yet",
         "drücken und einen Bereich aufziehen.": "to select an area of the screen.",
         "Noch keine Diktate": "No dictations yet",
-        "Halte": "Hold",
-        "gedrückt, sprich und lass los.": "while you speak, then let go.",
+        "Drück": "Press",
+        ", sprich und drück noch einmal.": ", speak, and press again.",
         "Jedes Diktat landet hier, durchsuchbar und nur auf diesem Mac.":
             "Every dictation lands here, searchable and only on this Mac.",
         "Keine Treffer": "No results",
@@ -86,8 +86,8 @@ extension Loc {
             "Floats as a capsule below the menu bar. On displays without a notch, VoiceBud always looks like this.",
         "Wächst seitlich aus der Notch. Nach dem Einfügen klappt sie kurz auf und bestätigt.":
             "Grows sideways out of the notch. After pasting, it briefly expands to confirm.",
-        "Ohne Live-Text erkennt VoiceBud erst nach dem Loslassen.":
-            "Without live text, VoiceBud transcribes only after you let go.",
+        "Ohne Live-Text erkennt VoiceBud erst nach dem Ende der Aufnahme.":
+            "Without live text, VoiceBud transcribes once the recording ends.",
         "Mit Live-Text hängt beim Sprechen eine Karte mit deinem Text darunter.":
             "With live text, a card with your words hangs below it while you speak.",
         "Mit Live-Text klappt sie beim Sprechen auf und zeigt mit, was ankommt.":

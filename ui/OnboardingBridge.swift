@@ -119,6 +119,12 @@ enum OnboardingBridge {
         }
         if let restart = msg["restart"] as? Bool { m.restartNeeded = restart }
         if let name = msg["tcc"] as? String, !name.isEmpty { m.tccName = name }
+        // the switch starts where macOS stands (once per window: the user's own flip then counts)
+        // (first setup: on, as recommended; later: what macOS has, so leaving it alone changes nothing)
+        if let login = msg["login"] as? Bool, !m.loginRead {
+            if IPC.state?.settings.onboardingDone == true { m.launchAtLogin = login }
+            m.loginRead = true
+        }
         if let mic = msg["mic"] as? String, !mic.isEmpty { m.micDevice = mic }
         for row in msg["models"] as? [[String: Any]] ?? [] {
             guard let id = row["id"] as? String, let i = m.models.firstIndex(where: { $0.id == id }) else { continue }

@@ -114,8 +114,29 @@ enum OCRHelper {
         /// serif fonts went too, 238 of 517 test lines. At 0.5 none: an intact line without
         /// ascenders is 0.58 of one even in Times; what still goes are i-dots, slivers and lines
         /// clipped so far that Vision read nothing or garbage from them before.)
+        /// the median width of the ink runs across a few rows: the letters' stroke. A strip cut
+        /// from a line keeps that line's strokes; smaller print that merely touches the edge has
+        /// thinner ones (review 05.10.: a footer "Seite 3 von 12" under 30 px text was dropped)
+        func stroke(_ rows: [Int]) -> Double {
+            var lengths: [Int] = []
+            for y in rows {
+                var run = 0
+                for x in stride(from: 0, to: w, by: step) {
+                    if abs(Int(gray[y * w + x]) - bg) > 48 { run += 1 } else if run > 0 { lengths.append(run); run = 0 }
+                }
+                if run > 0 { lengths.append(run) }
+            }
+            guard !lengths.isEmpty else { return 0 }
+            return Double(lengths.sorted()[lengths.count / 2])
+        }
+        func middleRows(_ b: (start: Int, end: Int)) -> [Int] {
+            let mid = (b.start + b.end) / 2
+            return [mid - 1, mid, mid + 1].filter { $0 >= b.start && $0 < b.end }
+        }
+        let bodyStroke = stroke(innerBands.prefix(3).flatMap(middleRows))
         func cut(_ b: (start: Int, end: Int), edge: Int) -> Bool {
             guard Double(b.end - b.start) < 0.5 * line else { return false }
+            if bodyStroke > 0 && stroke(middleRows(b)) < 0.75 * bodyStroke { return false }   // smaller print, intact
             let densest = count[b.start..<b.end].max() ?? 0
             return densest > 0 && Double(count[edge]) >= 0.5 * Double(densest)
         }

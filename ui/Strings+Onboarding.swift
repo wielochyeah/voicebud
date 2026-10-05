@@ -134,7 +134,7 @@ extension Loc {
         // 8 Darstellung
         "Darstellung": "Appearance",
         "So zeigt sich VoiceBud, während du sprichst.": "How VoiceBud looks while you speak.",
-        "Insel an der Notch": "Island at the notch",
+        "Insel an der Notch": "Island at the Notch",
         "Kapsel": "Capsule",
         "Live-Text beim Sprechen kannst du später in den Einstellungen einschalten.":
             "You can turn on live text while speaking later in Settings.",
@@ -142,11 +142,11 @@ extension Loc {
         // 9 Alcove
         "Alcove nutzt die Notch auch.\nWähle, wie sich die beiden die Notch teilen.":
             "Alcove uses the notch too.\nChoose how the two of them share it.",
-        "Ausweichen": "Step aside",
+        "Ausweichen": "Step Aside",
         "Automatisch": "Automatic",
         // "Recommended" gets cut off next to "Text at cursor" (tile 170 pt)
         "Empfohlen": "Suggested",
-        "Übernehmen": "Take over",
+        "Übernehmen": "Take Over",
         "Alcove behält die Notch. VoiceBud erscheint als Kapsel direkt darunter.":
             "Alcove keeps the notch. VoiceBud appears as a capsule right below it.",
         "VoiceBud sitzt in der Notch, solange Alcove nichts zeigt.\nSpielt Alcove etwas ab, rutscht VoiceBud darunter.":
@@ -157,11 +157,11 @@ extension Loc {
         "Mitlesen": "Screen Context",
         "VoiceBud liest mit, damit Namen und Fachbegriffe stimmen.\nDu entscheidest, wie viel.":
             "VoiceBud reads along so names and technical terms come out right.\nYou decide how much.",
-        "Nur die App": "App only",
+        "Nur die App": "App Only",
         "Weiß nur, in welcher\nApp du schreibst.": "Only knows which\napp you’re typing in.",
-        "Text am Cursor": "Text at cursor",
+        "Text am Cursor": "Text at Cursor",
         "Liest die Zeilen rund\num deinen Cursor.": "Reads the lines\naround your cursor.",
-        "Ganzes Fenster": "Whole window",
+        "Ganzes Fenster": "Whole Window",
         "Liest das ganze\naktive Fenster.": "Reads the whole\nactive window.",
         "Im Prompt-Modus „diese Mail“ dazusagen": "Say “this email” in prompt mode",
         "Dann liest VoiceBud für dieses eine Diktat das ganze Fenster\nund hängt den Text wörtlich unter den Prompt.":

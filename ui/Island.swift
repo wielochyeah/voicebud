@@ -1550,6 +1550,9 @@ struct NotchIslandView: View {
         if live { return IslandMetrics.liveWidth }
         if expanded { return IslandMetrics.hoverWidth }
         if phase == .recording && model.mode == .ocr { return model.notch.width + 2 * 112 }   // room for "Bereich wählen"
+        // the seconds counter and the spinner need more than a compact ear (review 05.10.: "12 s"
+        // slid under the hardware notch and read as "2 s")
+        if phase == .processing && model.slowSince != nil { return model.notch.width + 2 * 80 }
         return phase == .done ? IslandMetrics.doneWidth : model.notch.width + 2 * IslandMetrics.earWidth
     }
 

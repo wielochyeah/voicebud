@@ -36,7 +36,8 @@ DEFAULT_APP_LEVELS = {b: WINDOW for b in (
 CAPPED_CATEGORIES = {"public.app-category.finance", "public.app-category.medical"}
 # browsers without a reliable private-window signal: at most "Text am Cursor"
 NO_PRIVATE_SIGNAL = {"com.apple.safari", "com.google.chrome", "com.microsoft.edgemac",
-                     "company.thebrowser.browser", "com.brave.browser", "com.operasoftware.opera"}
+                     "company.thebrowser.browser", "company.thebrowser.dia", "com.brave.browser",
+                     "com.operasoftware.opera"}
 PRIVATE_TITLE = re.compile(r"privater modus|private browsing|privates surfen|privates fenster|"
                            r"inkognito|incognito", re.I)
 # Electron editors switch to "screen reader optimised" mode when AX is forced on: never touch them
@@ -280,7 +281,7 @@ def effective_level(level, app, per_app=None):
     return level, None
 
 
-def capture(level=DEFAULT_LEVEL, own_pids=(), per_app=None, app=None):
+def capture(level=DEFAULT_LEVEL, own_pids=(), per_app=None, app=None, cap=None):
     """Snapshot of the frontmost app at `level`, or None when there is nothing to read (VoiceBud
     itself in front, level off, excluded app). Bounded by the 0.25 s Accessibility timeout."""
     t0 = time.perf_counter()
@@ -288,6 +289,8 @@ def capture(level=DEFAULT_LEVEL, own_pids=(), per_app=None, app=None):
     if app is None:
         return None
     lvl, reason = effective_level(level, app, per_app)
+    if cap is not None:
+        lvl = min(lvl, cap)          # the Befehlsmodus: the selection, never the chat app's window
     snap = Snapshot(app, lvl)
     if lvl <= OFF:
         snap.withheld = reason

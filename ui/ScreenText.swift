@@ -648,7 +648,7 @@ final class ScreenText {
         askingWord = false
         let parts = answer.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: ", ")
         guard parts.count == 2, !parts[0].isEmpty, parts[0] != "missing value",
-              let size = Double(parts[1].replacingOccurrences(of: ",", with: ".")), size > 0 else { return }
+              let size = Double(parts[1].replacingOccurrences(of: ",", with: ".")), size > 0, size <= 1638 else { return }
         let font = (name: parts[0], size: size)
         guard wordFont.map({ $0 != font }) ?? true else { return }
         wordFont = font

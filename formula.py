@@ -117,6 +117,7 @@ class _Reader:
 
     def __init__(self, tex):
         self.s, self.i = tex, 0
+        self.env = []             # open environments: "&" and "\\\\" read by the innermost
 
     def peek(self):
         return self.s[self.i] if self.i < len(self.s) else ""
@@ -174,7 +175,8 @@ class _Reader:
             return " "
         if c == "&":
             self.i += 1
-            return ", "
+            kind = self.env[-1] if self.env else "matrix"
+            return "" if kind == "align" else " " if kind == "cases" else ", "
         if c == "-":
             self.i += 1
             return "−"
@@ -220,11 +222,15 @@ class _Reader:
                 return ""
             return ""             # the delimiter that follows is read as it is
         if name == "begin":
-            self.group()          # the environment's name: its rows follow (& and \\ read as , and ;)
-            return "["
+            env = self.group().strip().rstrip("*")
+            kind = ("align" if env in ("aligned", "align", "split", "gathered", "gather", "eqnarray", "multline")
+                    else "cases" if env in ("cases", "dcases") else "matrix")
+            self.env.append(kind)
+            return {"align": "", "cases": "{", "matrix": "["}[kind]
         if name == "end":
             self.group()
-            return "]"
+            kind = self.env.pop() if self.env else "matrix"
+            return "]" if kind == "matrix" else ""
         if name in _FUNCTIONS:
             return name
         if name in _SYMBOLS:
@@ -260,6 +266,7 @@ def latex_to_text(tex):
     """One formula in readable characters."""
     out = _Reader(tex).sequence()
     out = out.replace("\n", "; ")
+    out = re.sub(r"\s+([;,])", r"\1", out)               # rows and cells: "b + c; d", "1, 2"
     out = re.sub(r"([(\[{⟨])\s+", r"\1", out)        # \left( x \right) -> (x)
     out = re.sub(r"\s+([)\]}⟩])", r"\1", out)
     out = re.sub(r"[ \t]{2,}", lambda m: m.group(0) if len(m.group(0)) >= 4 else " ", out)
@@ -292,6 +299,7 @@ def _mathml(tex, display):
 
 
 _BULLET = re.compile(r"^\s*[-*•]\s+")
+_HEADING = re.compile(r"^(#{1,6})\s+(.*)")
 
 
 def _inline_html(text):
@@ -323,6 +331,17 @@ def html(md):
             lines = [l for l in para.strip("\n").split("\n") if l.strip()]
             run, bullets = [], None
             for line in lines + [None]:            # None closes the last run
+                if line is not None and _HEADING.match(line):
+                    if run:
+                        lines_left = run
+                        run = []
+                        blocks.append("<ul>" + "".join('<li class="MsoNormal">' + _inline_html(_BULLET.sub("", l)) + "</li>"
+                                                        for l in lines_left) + "</ul>" if bullets
+                                      else '<p class="MsoNormal">' + "<br>".join(_inline_html(l) for l in lines_left) + "</p>")
+                    h = _HEADING.match(line)
+                    level = min(len(h.group(1)) + 1, 4)
+                    blocks.append(f"<h{level}>{_inline_html(h.group(2))}</h{level}>")
+                    continue
                 is_bullet = line is not None and bool(_BULLET.match(line))
                 if run and (line is None or is_bullet != bullets):
                     if bullets:
