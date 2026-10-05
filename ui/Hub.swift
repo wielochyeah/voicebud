@@ -169,19 +169,19 @@ enum HubPane: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .verlauf: return "Verlauf"
-        case .texterkennung: return "Texterkennung"
-        case .woerterbuch: return "Wörterbuch"
-        case .kuerzel: return "Kürzel"
-        case .insel: return "Insel & Kapsel"
-        case .welle: return "Wellenform"
+        case .verlauf: return L("Verlauf")
+        case .texterkennung: return L("Texterkennung")
+        case .woerterbuch: return L("Wörterbuch")
+        case .kuerzel: return L("Kürzel")
+        case .insel: return L("Insel & Kapsel")
+        case .welle: return L("Wellenform")
         case .alcove: return "Alcove"
-        case .kontext: return "Bildschirmkontext"
-        case .allgemein: return "Allgemein"
+        case .kontext: return L("Bildschirmkontext")
+        case .allgemein: return L("Allgemein")
         }
     }
 
-    var headerTitle: String { self == .alcove ? "Wenn Alcove läuft" : title }
+    var headerTitle: String { self == .alcove ? L("Wenn Alcove läuft") : title }
 
     var icon: HubIcon {
         switch self {
@@ -200,8 +200,9 @@ enum HubPane: String, CaseIterable, Identifiable {
 
 struct HubDay: Identifiable {
     let id: Date
-    let label: String
     let items: [HistoryEntry]
+    /// worked out when drawn, so "Heute" or "Today" follows a language switch
+    var label: String { HubFormat.dayLabel(id) }
 }
 
 enum HubAddResult: Equatable {
@@ -315,13 +316,13 @@ final class HubModel {
         for e in entries {
             let day = cal.startOfDay(for: e.date)
             if day != current {
-                if let current { out.append(HubDay(id: current, label: HubFormat.dayLabel(current), items: bucket)) }
+                if let current { out.append(HubDay(id: current, items: bucket)) }
                 current = day
                 bucket = []
             }
             bucket.append(e)
         }
-        if let current { out.append(HubDay(id: current, label: HubFormat.dayLabel(current), items: bucket)) }
+        if let current { out.append(HubDay(id: current, items: bucket)) }
         days = out
     }
 
@@ -548,7 +549,7 @@ struct HubSidebar: View {
         let t = HubTheme(scheme)
         VStack(alignment: .leading, spacing: 2) {
             ForEach(HubPane.top) { item($0, t) }
-            Text("Einstellungen")
+            Text(L("Einstellungen"))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(t.sideGroup)
                 .padding(.leading, 10)
@@ -621,9 +622,9 @@ struct HubSidebar: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 Circle().fill(t.ok).frame(width: 7, height: 7)
-                Text("Alles lokal und offline")
+                Text(L("Alles lokal und offline"))
             }
-            Text("Nichts verlässt den Mac").padding(.leading, 13)
+            Text(L("Nichts verlässt den Mac")).padding(.leading, 13)
         }
         .font(.system(size: 11.5))
         .foregroundStyle(t.fg2)
@@ -879,7 +880,7 @@ struct HubSwitch: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(HubPlainStyle())
-        .accessibilityValue(isOn ? "Ein" : "Aus")
+        .accessibilityValue(isOn ? L("Ein") : L("Aus"))
     }
 }
 
@@ -1117,12 +1118,12 @@ struct HubHistoryPane: View {
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(t.fg3)
             if isStatic {
-                Text(model.query.isEmpty ? (model.ocrPane ? "Erkannte Texte durchsuchen" : "Diktate durchsuchen") : model.query)
+                Text(model.query.isEmpty ? searchPrompt : model.query)
                     .foregroundStyle(model.query.isEmpty ? t.fg3 : t.fg)
                 Spacer(minLength: 0)
             } else {
                 TextField("", text: Binding(get: { model.query }, set: { model.setQuery($0) }),
-                          prompt: Text(model.ocrPane ? "Erkannte Texte durchsuchen" : "Diktate durchsuchen"))
+                          prompt: Text(searchPrompt))
                     .textFieldStyle(.plain)
                     .foregroundStyle(t.fg)
                     .focused($searchFocused)
@@ -1133,7 +1134,7 @@ struct HubHistoryPane: View {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(t.fg3)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Suche löschen")
+                .accessibilityLabel(L("Suche löschen"))
             }
         }
         .font(.system(size: 12.5))
@@ -1142,18 +1143,22 @@ struct HubHistoryPane: View {
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(t.field))
     }
 
+    private var searchPrompt: String {
+        model.ocrPane ? L("Erkannte Texte durchsuchen") : L("Diktate durchsuchen")
+    }
+
     private func statsLine(_ t: HubTheme) -> some View {
         let s = model.stats
         return HStack(spacing: 20) {
             if !model.query.isEmpty {
-                stat(HubFormat.int(model.entries.count) + (model.canLoadMore ? "+" : ""), "Treffer", t)
+                stat(HubFormat.int(model.entries.count) + (model.canLoadMore ? "+" : ""), L("Treffer"), t)
             } else if s.count == 0 {
-                Text("Heute noch nichts diktiert")
-                if model.totalCount > 0 { stat(HubFormat.int(model.totalCount), "Einträge insgesamt", t) }
+                Text(L("Heute noch nichts diktiert"))
+                if model.totalCount > 0 { stat(HubFormat.int(model.totalCount), L("Einträge insgesamt"), t) }
             } else {
-                stat(HubFormat.int(s.words), s.words == 1 ? "Wort heute" : "Wörter heute", t)
-                stat(HubFormat.int(s.count), s.count == 1 ? "Diktat" : "Diktate", t)
-                if let avg = s.avgSeconds { stat("Ø " + HubFormat.seconds(avg), "Verarbeitung", t) }
+                stat(HubFormat.int(s.words), s.words == 1 ? L("Wort heute") : L("Wörter heute"), t)
+                stat(HubFormat.int(s.count), s.count == 1 ? L("Diktat", context: "Anzahl") : L("Diktate"), t)
+                if let avg = s.avgSeconds { stat(L("Ø %@", HubFormat.seconds(avg)), L("Verarbeitung"), t) }
             }
             Spacer(minLength: 0)
         }
@@ -1232,34 +1237,34 @@ struct HubHistoryPane: View {
     private func emptyState(_ t: HubTheme) -> some View {
         VStack(spacing: 8) {
             if model.query.isEmpty && model.ocrPane {
-                Text("Noch keine erkannten Texte")
+                Text(L("Noch keine erkannten Texte"))
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(t.fg)
                 HStack(spacing: 6) {
                     HubKeyCaps(keys: ["⇧", "⌘", "2"])
-                    Text("drücken und einen Bereich aufziehen.")
+                    Text(L("drücken und einen Bereich aufziehen."))
                 }
                 .font(.system(size: 13))
                 .foregroundStyle(t.fg2)
             } else if model.query.isEmpty {
-                Text("Noch keine Diktate")
+                Text(L("Noch keine Diktate"))
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(t.fg)
                 HStack(spacing: 6) {
-                    Text("Halte")
+                    Text(L("Halte"))
                     HubKeyCaps(keys: HubFormat.hotkey(model.state.hotkeys["dictate"] ?? "ctrl+shift"))
-                    Text("gedrückt, sprich und lass los.")
+                    Text(L("gedrückt, sprich und lass los."))
                 }
                 .font(.system(size: 12.5))
                 .foregroundStyle(t.fg2)
-                Text("Jedes Diktat landet hier, durchsuchbar und nur auf diesem Mac.")
+                Text(L("Jedes Diktat landet hier, durchsuchbar und nur auf diesem Mac."))
                     .font(.system(size: 12.5))
                     .foregroundStyle(t.fg2)
             } else {
-                Text("Keine Treffer")
+                Text(L("Keine Treffer"))
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(t.fg)
-                Text("Nichts gefunden für „\(model.query)“.")
+                Text(L("Nichts gefunden für „%@“.", model.query))
                     .font(.system(size: 12.5))
                     .foregroundStyle(t.fg2)
             }
@@ -1318,8 +1323,8 @@ struct HubHistoryRow: View {
                 }
             }
             HStack(spacing: 4) {
-                HubChip(title: copied ? "Kopiert" : "Kopieren", symbol: copied ? "checkmark" : nil, action: onCopy)
-                if hasOriginal { HubChip(title: "Original", active: expanded, action: onOriginal) }
+                HubChip(title: copied ? L("Kopiert") : L("Kopieren"), symbol: copied ? "checkmark" : nil, action: onCopy)
+                if hasOriginal { HubChip(title: L("Original"), active: expanded, action: onOriginal) }
             }
             .opacity(hovered || expanded ? 1 : 0)
             .animation(.easeOut(duration: 0.15), value: hovered)
@@ -1344,7 +1349,7 @@ struct HubModeBadge: View {
         let t = HubTheme(scheme)
         HStack(spacing: 5) {
             Circle().fill(t.modeDot(mode)).frame(width: 6, height: 6)
-            Text(mode == .dictate ? "Diktat" : mode == .prompt ? "Prompt" : "Befehl").fontWeight(.semibold).foregroundStyle(t.fg2)
+            Text(mode == .dictate ? L("Diktat") : mode == .prompt ? L("Prompt") : L("Befehl")).fontWeight(.semibold).foregroundStyle(t.fg2)
         }
     }
 }
@@ -1357,7 +1362,7 @@ struct HubOriginalBox: View {
     var body: some View {
         let t = HubTheme(scheme)
         VStack(alignment: .leading, spacing: 3) {
-            Text("Original")
+            Text(L("Original"))
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(t.fg3)
             Text(HubDiff.attributed(raw: raw, final: final, strike: t.strike))
@@ -1476,14 +1481,14 @@ struct HubDictionaryPane: View {
         VStack(spacing: 0) {
             HubPaneHeader(pane: .woerterbuch)
             HubSettingsColumn {
-                Text("Namen und Fachbegriffe, die VoiceBud genau so schreiben soll. Ähnlich klingende Wörter ersetzt es beim Diktieren automatisch.")
+                Text(L("Namen und Fachbegriffe, die VoiceBud genau so schreiben soll. Ähnlich klingende Wörter ersetzt es beim Diktieren automatisch."))
                     .font(.system(size: 12.5))
                     .foregroundStyle(t.fg2)
                     .lineSpacing(1.5)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 6)
                     .padding(.bottom, 16)
-                HubGroupLabel(model.terms.count == 1 ? "1 Begriff" : "\(HubFormat.int(model.terms.count)) Begriffe")
+                HubGroupLabel(model.terms.count == 1 ? L("1 Begriff") : L("%@ Begriffe", HubFormat.int(model.terms.count)))
                 HubCard {
                     addRow(t)
                     ForEach(model.terms, id: \.self) { term in
@@ -1493,12 +1498,12 @@ struct HubDictionaryPane: View {
                     }
                 }
                 if !learned.isEmpty {
-                    HubGroupLabel("Gelernte Korrekturen", top: 20)
+                    HubGroupLabel(L("Gelernte Korrekturen"), top: 20)
                     HubCard {
                         ForEach(Array(learned.keys.sorted().enumerated()), id: \.element) { i, heard in
                             if i > 0 { HubSeparator() }
-                            HubRow(learned[heard] ?? "", subtitle: "statt „\(heard)“") {
-                                HubChip(title: "Entfernen") { forget(heard) }
+                            HubRow(learned[heard] ?? "", subtitle: L("statt „%@“", heard)) {
+                                HubChip(title: L("Entfernen")) { forget(heard) }
                             }
                         }
                     }
@@ -1537,10 +1542,10 @@ struct HubDictionaryPane: View {
                 .font(.system(size: 15))
                 .foregroundStyle(t.accent)
             if isStatic {
-                Text("Begriff hinzufügen").foregroundStyle(t.fg3)
+                Text(L("Begriff hinzufügen")).foregroundStyle(t.fg3)
                 Spacer(minLength: 0)
             } else {
-                TextField("", text: $draft, prompt: Text("Begriff hinzufügen"))
+                TextField("", text: $draft, prompt: Text(L("Begriff hinzufügen")))
                     .textFieldStyle(.plain)
                     .foregroundStyle(t.fg)
                     .onSubmit(add)
@@ -1569,7 +1574,7 @@ struct HubDictionaryPane: View {
             }
             .buttonStyle(HubPressStyle())
             .opacity(isHovered ? 1 : 0)
-            .accessibilityLabel("\(term) entfernen")
+            .accessibilityLabel(L("%@ entfernen", term))
         }
         .padding(.horizontal, 12)
         .frame(height: 38)
@@ -1616,19 +1621,19 @@ struct HubIslandPane: View {
                 HubIslandStage(shape: shape, liveText: s.liveText, wave: s.waveStyle, waveLive: s.waveLive)
                     .padding(.bottom, 14)
                 HubCard {
-                    HubTilePicker(options: [(.insel, "Insel an der Notch"), (.kapsel, "Kapsel")],
+                    HubTilePicker(options: [(.insel, L("Insel an der Notch")), (.kapsel, L("Kapsel"))],
                                   selection: shape,
                                   select: { v in model.update { $0.islandStyle = v } }) { style in
                         HubIslandTile(style: style, wave: s.waveStyle, liveText: s.liveText)
                     }
                     HubSeparator()
-                    HubRow("Live-Text beim Sprechen",
-                           subtitle: shape == .kapsel ? "Aus: nur die Kapsel, ohne Streaming"
-                                                      : "Aus: kompakte Insel, ohne Streaming") {
+                    HubRow(L("Live-Text beim Sprechen"),
+                           subtitle: shape == .kapsel ? L("Aus: nur die Kapsel, ohne Streaming")
+                                                      : L("Aus: kompakte Insel, ohne Streaming")) {
                         HubSwitch(isOn: model.binding(\.liveText))
                     }
                     HubSeparator()
-                    HubRow("Bestätigung anzeigen") { HubValueCapsule(text: HubFormat.seconds(s.confirmSeconds)) }
+                    HubRow(L("Bestätigung anzeigen")) { HubValueCapsule(text: HubFormat.seconds(s.confirmSeconds)) }
                     HubDetentSlider(value: Binding(get: { model.state.settings.confirmSeconds },
                                                    set: { model.state.settings.confirmSeconds = $0 }),
                                     detents: [0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
@@ -1637,16 +1642,16 @@ struct HubIslandPane: View {
                         .padding(.top, -4)
                         .padding(.bottom, 8)
                     HubSeparator()
-                    HubRow("Beim Überfahren ausklappen",
-                           subtitle: "Die Bestätigung zeigt dann den ganzen Text und bleibt offen, solange die Maus darauf ist.") {
+                    HubRow(L("Beim Überfahren ausklappen"),
+                           subtitle: L("Die Bestätigung zeigt dann den ganzen Text und bleibt offen, solange die Maus darauf ist.")) {
                         HubSwitch(isOn: model.binding(\.confirmHoverExpand))
                     }
                 }
                 HubFootnote(note(shape, liveText: s.liveText))
                     .transaction { $0.animation = nil }
-                HubGroupLabel("Menüleisten-Symbol beim Aufnehmen", top: 20)
+                HubGroupLabel(L("Menüleisten-Symbol beim Aufnehmen"), top: 20)
                 HubCard {
-                    HubTilePicker(options: [(.schlicht, "Schlicht"), (.farbe, "Farbe"), (.punkt, "Roter Punkt"), (.zeit, "Zeit")],
+                    HubTilePicker(options: [(.schlicht, L("Schlicht")), (.farbe, L("Farbe")), (.punkt, L("Roter Punkt")), (.zeit, L("Zeit"))],
                                   selection: s.menuBarStyle,
                                   select: { v in model.update { $0.menuBarStyle = v } }) { style in
                         HubMenuBarTile(style: style)
@@ -1660,25 +1665,25 @@ struct HubIslandPane: View {
 
     private func menuBarNote(_ style: MenuBarStyle) -> String {
         switch style {
-        case .schlicht: return "Das Symbol bleibt immer gleich. Dass aufgenommen wird, zeigt der orange Punkt von macOS neben dem Kontrollzentrum."
-        case .farbe: return "Das Mikrofon färbt sich in der Farbe des Modus: Diktat violett, Prompt türkis, Befehl bernstein. Bei stummem Ton steht ein durchgestrichener Lautsprecher daneben."
-        case .punkt: return "Das Mikrofon bekommt einen kleinen roten Aufnahmepunkt, wie bei Bildschirmaufnahmen. Bei stummem Ton steht ein durchgestrichener Lautsprecher daneben."
-        case .zeit: return "Das Symbol wird zur Kapsel mit laufender Zeit. Am auffälligsten, braucht aber mehr Platz in der Menüleiste."
+        case .schlicht: return L("Das Symbol bleibt immer gleich. Dass aufgenommen wird, zeigt der orange Punkt von macOS neben dem Kontrollzentrum.")
+        case .farbe: return L("Das Mikrofon färbt sich in der Farbe des Modus: Diktat violett, Prompt türkis, Befehl bernstein. Bei stummem Ton steht ein durchgestrichener Lautsprecher daneben.")
+        case .punkt: return L("Das Mikrofon bekommt einen kleinen roten Aufnahmepunkt, wie bei Bildschirmaufnahmen. Bei stummem Ton steht ein durchgestrichener Lautsprecher daneben.")
+        case .zeit: return L("Das Symbol wird zur Kapsel mit laufender Zeit. Am auffälligsten, braucht aber mehr Platz in der Menüleiste.")
         }
     }
 
     /// one note per shape tile, plus one sentence for the live-text switch
     private func note(_ shape: IslandStyle, liveText: Bool) -> String {
         let base = shape == .kapsel
-            ? "Schwebt als Kapsel unter der Menüleiste. Auf Bildschirmen ohne Notch sieht VoiceBud immer so aus."
-            : "Wächst seitlich aus der Notch. Nach dem Einfügen klappt sie kurz auf und bestätigt."
+            ? L("Schwebt als Kapsel unter der Menüleiste. Auf Bildschirmen ohne Notch sieht VoiceBud immer so aus.")
+            : L("Wächst seitlich aus der Notch. Nach dem Einfügen klappt sie kurz auf und bestätigt.")
         let live: String
         if !liveText {
-            live = "Ohne Live-Text erkennt VoiceBud erst nach dem Loslassen."
+            live = L("Ohne Live-Text erkennt VoiceBud erst nach dem Loslassen.")
         } else if shape == .kapsel {
-            live = "Mit Live-Text hängt beim Sprechen eine Karte mit deinem Text darunter."
+            live = L("Mit Live-Text hängt beim Sprechen eine Karte mit deinem Text darunter.")
         } else {
-            live = "Mit Live-Text klappt sie beim Sprechen auf und zeigt mit, was ankommt."
+            live = L("Mit Live-Text klappt sie beim Sprechen auf und zeigt mit, was ankommt.")
         }
         return base + " " + live
     }
@@ -1736,7 +1741,7 @@ struct HubWavePane: View {
                 HubIslandStage(shape: s.islandShape, liveText: s.liveText, wave: s.waveStyle, waveLive: s.waveLive)
                     .padding(.bottom, 14)
                 HubCard {
-                    HubTilePicker(options: [(.fein, "Fein"), (.sym, "Symmetrisch"), (.linie, "Linie")],
+                    HubTilePicker(options: [(.fein, L("Fein")), (.sym, L("Symmetrisch")), (.linie, L("Linie"))],
                                   selection: s.waveStyle,
                                   select: { v in model.update { $0.waveStyle = v } }) { style in
                         ZStack {
@@ -1746,7 +1751,7 @@ struct HubWavePane: View {
                         }
                     }
                     HubSeparator()
-                    HubRow("Folgt deiner Stimme live", subtitle: "Aus: ruhige Animation statt echtem Pegel") {
+                    HubRow(L("Folgt deiner Stimme live"), subtitle: L("Aus: ruhige Animation statt echtem Pegel")) {
                         HubSwitch(isOn: model.binding(\.waveLive))
                     }
                 }
@@ -1772,23 +1777,23 @@ struct HubAlcovePane: View {
                     HubRow("Alcove") {
                         HStack(spacing: 6) {
                             Circle().fill(running ? t.ok : t.fg3).frame(width: 7, height: 7)
-                            Text(running ? "Läuft gerade" : "Läuft gerade nicht")
+                            Text(running ? L("Läuft gerade") : L("Läuft gerade nicht"))
                                 .font(.system(size: 12.5))
                                 .foregroundStyle(t.fg2)
                         }
                     }
                     HubSeparator()
-                    HubTilePicker(options: [(.auto, "Automatisch"), (.dodge, "Ausweichen"), (.takeover, "Übernehmen")],
+                    HubTilePicker(options: [(.auto, L("Automatisch")), (.dodge, L("Ausweichen")), (.takeover, L("Übernehmen"))],
                                   selection: s.alcove,
                                   select: { v in model.update { $0.alcove = v } }) { mode in
                         HubAlcoveTile(mode: mode)
                     }
                 }
                 HubFootnote(s.alcove == .auto
-                    ? "VoiceBud nimmt die Notch, solange Alcove dort nichts zeigt. Spielt gerade Musik und Alcove zeigt sie an, erscheint VoiceBud als Kapsel direkt darunter. In Alcove musst du nichts umstellen."
+                    ? L("VoiceBud nimmt die Notch, solange Alcove dort nichts zeigt. Spielt gerade Musik und Alcove zeigt sie an, erscheint VoiceBud als Kapsel direkt darunter. In Alcove musst du nichts umstellen.")
                     : s.alcove == .dodge
-                    ? "Alcove behält die Notch. VoiceBud erscheint als Kapsel direkt darunter, Live-Text hängt als Karte darunter. In Alcove musst du nichts umstellen."
-                    : "Während du diktierst, gehört die Notch VoiceBud. Stell dafür in Alcove unter „Idle Activity“ auf „None“, sonst liegen zwei Inseln übereinander.")
+                    ? L("Alcove behält die Notch. VoiceBud erscheint als Kapsel direkt darunter, Live-Text hängt als Karte darunter. In Alcove musst du nichts umstellen.")
+                    : L("Während du diktierst, gehört die Notch VoiceBud. Stell dafür in Alcove unter „Idle Activity“ auf „None“, sonst liegen zwei Inseln übereinander."))
                     .transaction { $0.animation = nil }
             }
         }
@@ -1804,46 +1809,69 @@ struct HubGeneralPane: View {
         VStack(spacing: 0) {
             HubPaneHeader(pane: .allgemein)
             HubSettingsColumn {
-                HubGroupLabel("Texterkennung")
+                HubGroupLabel(L("Sprache"))
                 HubCard {
-                    HubRow("Texterkennung mit ⇧⌘2", subtitle: "Bereich aufziehen, der Text landet in der Zwischenablage") {
+                    HubRow(L("Oberfläche"), subtitle: L("Sprache von Hub, Insel, Menü und Einrichtung")) {
+                        Picker("", selection: Binding(get: { model.state.settings.uiLanguage },
+                                                      set: { v in model.update { $0.uiLanguage = v } })) {
+                            Text(L("Wie macOS")).tag(UILanguage.system)
+                            // each language in its own name, so it can be found in either language
+                            Text(verbatim: "Deutsch").tag(UILanguage.de)
+                            Text(verbatim: "English").tag(UILanguage.en)
+                        }
+                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    }
+                    HubSeparator()
+                    HubRow(L("Diktat"), subtitle: L("Automatisch erkennt Deutsch oder Englisch je Aufnahme")) {
+                        Picker("", selection: Binding(get: { model.state.settings.dictationLanguage },
+                                                      set: { v in model.update { $0.dictationLanguage = v } })) {
+                            Text(L("Automatisch")).tag(DictationLanguage.auto)
+                            Text(L("Deutsch")).tag(DictationLanguage.de)
+                            Text(L("Englisch")).tag(DictationLanguage.en)
+                        }
+                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    }
+                }
+                HubGroupLabel(L("Texterkennung"), top: 20)
+                HubCard {
+                    HubRow(L("Texterkennung mit ⇧⌘2"), subtitle: L("Bereich aufziehen, der Text landet in der Zwischenablage")) {
                         HubSwitch(isOn: model.binding(\.screenText))
                     }
                     HubSeparator()
-                    HubRow("Erkannte Texte im Verlauf", subtitle: "Eigener Verlauf, getrennt von den Diktaten") {
+                    HubRow(L("Erkannte Texte im Verlauf"), subtitle: L("Eigener Verlauf, getrennt von den Diktaten")) {
                         HubSwitch(isOn: model.binding(\.screenTextHistory))
                     }
                 }
-                HubGroupLabel("Verhalten", top: 20)
+                HubGroupLabel(L("Verhalten"), top: 20)
                 HubCard {
-                    HubRow("Start- und Stopp-Ton", subtitle: "Leiser Ton beim Drücken und beim Loslassen") {
+                    HubRow(L("Start- und Stopp-Ton"), subtitle: L("Leiser Ton beim Drücken und beim Loslassen")) {
                         HubSwitch(isOn: model.binding(\.sounds) { on in
                             if on && !model.isPreview { HubSystem.playSample() }
                         })
                     }
                     HubSeparator()
-                    HubRow("Im Vollbild ausblenden", subtitle: "Keine Insel, solange eine App im Vollbild läuft") {
+                    HubRow(L("Im Vollbild ausblenden"), subtitle: L("Keine Insel, solange eine App im Vollbild läuft")) {
                         HubSwitch(isOn: model.binding(\.hideInFullscreen))
                     }
                     HubSeparator()
-                    HubRow("Ton aus während der Aufnahme", subtitle: "Musik und Videos schweigen, solange du diktierst") {
+                    HubRow(L("Ton aus während der Aufnahme"), subtitle: L("Musik und Videos schweigen, solange du diktierst")) {
                         HubSwitch(isOn: model.binding(\.muteWhileRecording))
                     }
                 }
                 if model.state.settings.muteWhileRecording {
-                    HubGroupLabel("Ton bleibt an bei", top: 20)
+                    HubGroupLabel(L("Ton bleibt an bei"), top: 20)
                     HubCard {
                         let apps = model.state.settings.muteExceptions.filter { HubContextCopy.installed($0) }
                         ForEach(apps, id: \.self) { bundle in
                             HubRow(HubContextCopy.appName(bundle), icon: HubContextCopy.icon(bundle)) {
-                                HubChip(title: "Entfernen") {
+                                HubChip(title: L("Entfernen")) {
                                     model.update { $0.muteExceptions.removeAll { $0 == bundle } }
                                 }
                             }
                             HubSeparator()
                         }
-                        HubRow("Weitere App", subtitle: "Ist sie vorne oder spielt sie Ton (etwa ein Anruf), bleibt der Ton an.") {
-                            HubChip(title: "App hinzufügen …") {
+                        HubRow(L("Weitere App"), subtitle: L("Ist sie vorne oder spielt sie Ton (etwa ein Anruf), bleibt der Ton an.")) {
+                            HubChip(title: L("App hinzufügen …")) {
                                 if !model.isPreview {
                                     HubContextCopy.pickApp { bundle in
                                         model.update { s in if !s.muteExceptions.contains(bundle) { s.muteExceptions.append(bundle) } }
@@ -1853,30 +1881,30 @@ struct HubGeneralPane: View {
                         }
                     }
                 }
-                HubGroupLabel("Speicher", top: 20)
+                HubGroupLabel(L("Speicher"), top: 20)
                 HubCard {
-                    HubRow("Modelle im RAM halten",
-                           subtitle: "Aus spart RAM: Whisper wird nach 10 Minuten Leerlauf entladen, das Sprachmodell für die Aufbereitung nach 5 Minuten. Beide laden beim nächsten Diktat nach.") {
+                    HubRow(L("Modelle im RAM halten"),
+                           subtitle: L("Aus spart RAM: Whisper wird nach 10 Minuten Leerlauf entladen, das Sprachmodell für die Aufbereitung nach 5 Minuten. Beide laden beim nächsten Diktat nach.")) {
                         HubSwitch(isOn: model.binding(\.keepModelsLoaded))
                     }
                 }
-                HubGroupLabel("Kurzbefehle", top: 20)
+                HubGroupLabel(L("Kurzbefehle"), top: 20)
                 HubCard {
-                    HubRow("Diktat", dot: t.modeDot(.dictate)) {
+                    HubRow(L("Diktat"), dot: t.modeDot(.dictate)) {
                         HubKeyCaps(keys: HubFormat.hotkey(model.state.hotkeys["dictate"] ?? "ctrl+shift"))
                     }
                     HubSeparator()
-                    HubRow("Prompt", dot: t.modeDot(.prompt)) {
+                    HubRow(L("Prompt"), dot: t.modeDot(.prompt)) {
                         HubKeyCaps(keys: HubFormat.hotkey(model.state.hotkeys["prompt"] ?? "ctrl+alt"))
                     }
                     if let command = model.state.hotkeys["command"] {
                         HubSeparator()
-                        HubRow("Befehl", subtitle: "Text markieren, halten, sagen was passieren soll", dot: t.modeDot(.command)) {
+                        HubRow(L("Befehl"), subtitle: L("Text markieren, halten, sagen was passieren soll"), dot: t.modeDot(.command)) {
                             HubKeyCaps(keys: HubFormat.hotkey(command))
                         }
                     }
                 }
-                HubFootnote("Diktat und Prompt: einmal drücken zum Starten, nochmal zum Beenden. Befehl: halten, sprechen, loslassen. Die Tasten legst du in config.yaml fest.")
+                HubFootnote(L("Diktat und Prompt: einmal drücken zum Starten, nochmal zum Beenden. Befehl: halten, sprechen, loslassen. Die Tasten legst du in config.yaml fest."))
             }
         }
     }
@@ -2259,8 +2287,8 @@ struct HubIslandStage: View {
     }
 
     private func sampleText(size: CGFloat) -> some View {
-        let old = Text("Den Termin am Donnerstag kann ich leider ").foregroundColor(.white.opacity(0.5))
-        let tail = Text("nicht wahrnehmen, nein, ich meine Freitag").foregroundColor(.white.opacity(0.95))
+        let old = Text(L("Den Termin am Donnerstag kann ich leider ")).foregroundColor(.white.opacity(0.5))
+        let tail = Text(L("nicht wahrnehmen, nein, ich meine Freitag")).foregroundColor(.white.opacity(0.95))
         let caret = Text(" ▏").foregroundColor(Palette.accent(.dictate))
         return Text("\(old)\(tail)\(caret)")
             .font(.system(size: size))
@@ -2465,42 +2493,58 @@ struct HubAlcoveTile: View {
 
 // MARK: - Helpers
 
-enum HubFormat {
-    private static let locale = Locale(identifier: "de_DE")
+/// L() for a German word the hub uses in two senses that English tells apart ("Diktat" is the
+/// mode and, in the stats line, "1 dictation"). The English table carries the second sense as
+/// "<German> (<context>)"; without that entry it falls back to L(german). German is unchanged.
+func L(_ german: String, context: String) -> String {
+    Loc.shared.english ? (Loc.en["\(german) (\(context))"] ?? L(german)) : german
+}
 
-    private static let intFormatter: NumberFormatter = {
+/// Numbers and dates in the app's language: "1.284", "0,7 s", "Montag, 5. Oktober" in German,
+/// "1,284", "0.7 s", "Monday, October 5" in English. Times stay 24-hour in both (the column is
+/// sized for "09:41").
+enum HubFormat {
+    private static let de = Locale(identifier: "de_DE")
+    private static let en = Locale(identifier: "en_US")
+
+    private static func intFormatter(_ locale: Locale) -> NumberFormatter {
         let f = NumberFormatter()
         f.locale = locale
         f.numberStyle = .decimal
         return f
-    }()
+    }
 
-    private static func formatter(_ format: String) -> DateFormatter {
+    private static func formatter(_ format: String, _ locale: Locale) -> DateFormatter {
         let f = DateFormatter()
         f.locale = locale
         f.dateFormat = format
         return f
     }
 
-    private static let timeFormatter = formatter("HH:mm")
-    private static let dayFormatter = formatter("EEEE, d. MMMM")
-    private static let yearFormatter = formatter("d. MMMM yyyy")
+    private static let intDE = intFormatter(de), intEN = intFormatter(en)
+    private static let timeDE = formatter("HH:mm", de), timeEN = formatter("HH:mm", en)
+    private static let dayDE = formatter("EEEE, d. MMMM", de), dayEN = formatter("EEEE, MMMM d", en)
+    private static let yearDE = formatter("d. MMMM yyyy", de), yearEN = formatter("MMMM d, yyyy", en)
 
-    static func int(_ n: Int) -> String { intFormatter.string(from: NSNumber(value: n)) ?? "\(n)" }
+    private static var english: Bool { Loc.shared.english }
+
+    static func int(_ n: Int) -> String { (english ? intEN : intDE).string(from: NSNumber(value: n)) ?? "\(n)" }
 
     static func seconds(_ s: Double) -> String {
-        String(format: "%.1f s", s).replacingOccurrences(of: ".", with: ",")
+        let text = String(format: "%.1f s", s)
+        return english ? text : text.replacingOccurrences(of: ".", with: ",")
     }
 
-    static func words(_ n: Int) -> String { n == 1 ? "1 Wort" : "\(int(n)) Wörter" }
+    static func words(_ n: Int) -> String { n == 1 ? L("1 Wort") : L("%@ Wörter", int(n)) }
 
-    static func time(_ d: Date) -> String { timeFormatter.string(from: d) }
+    static func time(_ d: Date) -> String { (english ? timeEN : timeDE).string(from: d) }
 
     static func dayLabel(_ day: Date, now: Date = Date()) -> String {
         let cal = Calendar.current
-        if cal.isDateInToday(day) { return "Heute" }
-        if cal.isDateInYesterday(day) { return "Gestern" }
-        return cal.isDate(day, equalTo: now, toGranularity: .year) ? dayFormatter.string(from: day) : yearFormatter.string(from: day)
+        if cal.isDateInToday(day) { return L("Heute") }
+        if cal.isDateInYesterday(day) { return L("Gestern") }
+        let thisYear = cal.isDate(day, equalTo: now, toGranularity: .year)
+        return (thisYear ? (english ? dayEN : dayDE) : (english ? yearEN : yearDE)).string(from: day)
     }
 
     /// "ctrl+shift" -> ["⌃", "⇧"]; plain names and _l/_r variants as in config.yaml.
@@ -2584,18 +2628,21 @@ enum HubDiff {
 // MARK: - Bildschirmkontext (KONTEXT-PLAN.md)
 
 enum HubContextCopy {
-    static let levels: [(value: Int, title: String)] = [(0, "Aus"), (1, "Nur App"), (2, "Text am Cursor"), (3, "Ganzes Fenster")]
+    // computed, not stored: the titles follow a language switch
+    static var levels: [(value: Int, title: String)] {
+        [(0, L("Aus")), (1, L("Nur App")), (2, L("Text am Cursor")), (3, L("Ganzes Fenster"))]
+    }
 
     static func hint(_ level: Int) -> String {
         switch level {
-        case 0: return "VoiceBud liest nichts vom Bildschirm."
-        case 1: return "VoiceBud sieht nur, in welcher App du schreibst, und wählt danach den Stil."
-        case 3: return "Dazu der sichtbare Text im aktiven Fenster, etwa ein Chatverlauf. So stimmen auch Namen aus dem Gespräch."
-        default: return "Empfohlen. Dazu der Text vor und nach dem Cursor, markierter Text sowie Empfänger und Betreff. So stimmen Namen, Anrede und Anschluss."
+        case 0: return L("VoiceBud liest nichts vom Bildschirm.")
+        case 1: return L("VoiceBud sieht nur, in welcher App du schreibst, und wählt danach den Stil.")
+        case 3: return L("Dazu der sichtbare Text im aktiven Fenster, etwa ein Chatverlauf. So stimmen auch Namen aus dem Gespräch.")
+        default: return L("Empfohlen. Dazu der Text vor und nach dem Cursor, markierter Text sowie Empfänger und Betreff. So stimmen Namen, Anrede und Anschluss.")
         }
     }
 
-    static let perApp: [(value: Int, title: String)] = [(0, "Aus"), (2, "Cursor"), (3, "Fenster")]
+    static var perApp: [(value: Int, title: String)] { [(0, L("Aus")), (2, L("Cursor")), (3, L("Fenster"))] }
 
     /// same list as context.DEFAULT_APP_LEVELS: chats and AI chats read the whole window
     static let windowByDefault = ["com.tinyspeck.slackmacgap", "com.microsoft.teams2", "com.microsoft.teams",
@@ -2634,7 +2681,7 @@ enum HubContextCopy {
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.prompt = "Hinzufügen"
+        panel.prompt = L("Hinzufügen")
         NSApp.activate(ignoringOtherApps: true)
         panel.begin { response in
             guard response == .OK, let url = panel.url, let bundle = Bundle(url: url)?.bundleIdentifier else { return }
@@ -2675,29 +2722,29 @@ struct HubContextPane: View {
                 }
                 HubFootnote(HubContextCopy.hint(s.contextLevel))
                     .transaction { $0.animation = nil }
-                HubGroupLabel("Im Prompt-Modus")
+                HubGroupLabel(L("Im Prompt-Modus"))
                     .padding(.top, 16)
                 HubCard {
-                    HubRow("„Diese Mail“ dazusagen",
-                           subtitle: "Sagst du „diese Mail“, „dieser Text“ oder „das hier“, liest VoiceBud für dieses eine Diktat das ganze Fenster und hängt den Text wörtlich unter den Prompt. Markierter Text kommt immer mit.") {
+                    HubRow(L("„Diese Mail“ dazusagen"),
+                           subtitle: L("Sagst du „diese Mail“, „dieser Text“ oder „das hier“, liest VoiceBud für dieses eine Diktat das ganze Fenster und hängt den Text wörtlich unter den Prompt. Markierter Text kommt immer mit.")) {
                         EmptyView()
                     }
                 }
-                HubGroupLabel("Apps")
+                HubGroupLabel(L("Apps"))
                     .padding(.top, 16)
                 HubCard {
-                    HubRow("Electron-Apps freischalten",
-                           subtitle: "Claude, Slack und Co. zeigen ihren Text erst, wenn VoiceBud sie beim Wechsel nach vorne freischaltet.") {
+                    HubRow(L("Electron-Apps freischalten"),
+                           subtitle: L("Claude, Slack und Co. zeigen ihren Text erst, wenn VoiceBud sie beim Wechsel nach vorne freischaltet.")) {
                         HubSwitch(isOn: model.binding(\.contextElectron))
                     }
                     ForEach(appRows(s), id: \.self) { bundle in
                         HubSeparator()
                         HubRow(HubContextCopy.appName(bundle),
-                               subtitle: s.contextApps[bundle] == nil ? "Standard" : "Eigene Wahl",
+                               subtitle: s.contextApps[bundle] == nil ? L("Standard") : L("Eigene Wahl"),
                                icon: HubContextCopy.icon(bundle)) {
                             HStack(spacing: 10) {
                                 if s.contextApps[bundle] != nil {
-                                    Button("Zurücksetzen") { model.update { $0.contextApps.removeValue(forKey: bundle) } }
+                                    Button(L("Zurücksetzen")) { model.update { $0.contextApps.removeValue(forKey: bundle) } }
                                         .buttonStyle(.plain)
                                         .font(.system(size: 12.5))
                                         .foregroundStyle(t.fg2)
@@ -2714,18 +2761,18 @@ struct HubContextPane: View {
                         }
                     }
                     HubSeparator()
-                    HubRow("Weitere App", subtitle: "Eine App aus dem Programme-Ordner auswählen. Sie liest dann das ganze Fenster.") {
-                        HubChip(title: "App hinzufügen …") {
+                    HubRow(L("Weitere App"), subtitle: L("Eine App aus dem Programme-Ordner auswählen. Sie liest dann das ganze Fenster.")) {
+                        HubChip(title: L("App hinzufügen …")) {
                             if !model.isPreview { HubContextCopy.addApp(model) }
                         }
                     }
                     HubSeparator()
-                    HubRow("Immer ausgenommen",
-                           subtitle: "Passwörter, Schlüsselbund, 1Password, Bitwarden und VoiceBud selbst, dazu Passwortfelder, sichere Eingabe und private Fenster.") {
+                    HubRow(L("Immer ausgenommen"),
+                           subtitle: L("Passwörter, Schlüsselbund, 1Password, Bitwarden und VoiceBud selbst, dazu Passwortfelder, sichere Eingabe und private Fenster.")) {
                         EmptyView()
                     }
                 }
-                HubFootnote("Alles bleibt auf diesem Mac und wird nach dem Einfügen sofort verworfen. Im Verlauf steht nie, was VoiceBud gelesen hat.")
+                HubFootnote(L("Alles bleibt auf diesem Mac und wird nach dem Einfügen sofort verworfen. Im Verlauf steht nie, was VoiceBud gelesen hat."))
             }
         }
     }
@@ -2773,7 +2820,7 @@ struct HubSnippetsPane: View {
         VStack(spacing: 0) {
             HubPaneHeader(pane: .kuerzel)
             HubSettingsColumn {
-                Text("Sag den Auslöser beim Diktieren, und VoiceBud setzt den ganzen Text wörtlich ein, etwa deine Adresse oder Signatur.")
+                Text(L("Sag den Auslöser beim Diktieren, und VoiceBud setzt den ganzen Text wörtlich ein, etwa deine Adresse oder Signatur."))
                     .font(.system(size: 12.5))
                     .foregroundStyle(t.fg2)
                     .lineSpacing(1.5)
@@ -2782,11 +2829,11 @@ struct HubSnippetsPane: View {
                     .padding(.bottom, 16)
                 HubCard {
                     VStack(alignment: .leading, spacing: 8) {
-                        field("Wenn ich sage", "meine Signatur", $trigger, t)
+                        field(L("Wenn ich sage"), L("meine Signatur"), $trigger, t)
                         HStack(alignment: .top, spacing: 10) {
-                            Text("schreibt VoiceBud").font(.system(size: 12.5)).foregroundStyle(t.fg2).frame(width: 118, alignment: .leading)
+                            Text(L("schreibt VoiceBud")).font(.system(size: 12.5)).foregroundStyle(t.fg2).frame(width: 118, alignment: .leading)
                             if isStatic {
-                                Text("Viele Grüße\nDein Name").font(.system(size: 13)).foregroundStyle(t.fg3)
+                                Text(L("Viele Grüße\nDein Name")).font(.system(size: 13)).foregroundStyle(t.fg3)
                                     .frame(maxWidth: .infinity, minHeight: 54, alignment: .topLeading)
                             } else {
                                 TextEditor(text: $text)
@@ -2797,23 +2844,23 @@ struct HubSnippetsPane: View {
                         }
                         HStack {
                             Spacer()
-                            HubChip(title: "Hinzufügen", active: canAdd) { add() }
+                            HubChip(title: L("Hinzufügen"), active: canAdd) { add() }
                                 .disabled(!canAdd)
                         }
                     }
                     .padding(12)
                 }
-                HubGroupLabel(items.count == 1 ? "1 Kürzel" : "\(items.count) Kürzel", top: 20)
+                HubGroupLabel(items.count == 1 ? L("1 Kürzel") : L("%d Kürzel", items.count), top: 20)
                 HubCard {
                     if items.isEmpty {
-                        Text("Noch keine Kürzel.")
+                        Text(L("Noch keine Kürzel."))
                             .font(.system(size: 13)).foregroundStyle(t.fg3)
                             .padding(.horizontal, 12).frame(height: 44, alignment: .leading)
                     }
                     ForEach(Array(items.enumerated()), id: \.offset) { i, item in
                         if i > 0 { HubSeparator() }
                         HubRow(item["trigger"] ?? "", subtitle: (item["text"] ?? "").replacingOccurrences(of: "\n", with: "  ")) {
-                            HubChip(title: "Entfernen") { remove(i) }
+                            HubChip(title: L("Entfernen")) { remove(i) }
                         }
                     }
                 }
