@@ -172,6 +172,8 @@ extension Loc {
         "Texterkennung mit ⇧⌘2": "Text recognition with ⇧⌘2",
         "Erkannte Texte im Verlauf": "Recognized text in history",
         "Formeln je App": "Formulas per App",
+        "Aufklappen": "Expand",
+        "Zuklappen": "Collapse",
         "Schrift in Word anpassen": "Match the Font in Word",
         "Der Text um die Formeln nimmt die Schrift an deinem Cursor. macOS fragt dafür einmal, ob VoiceBud Word steuern darf.":
             "The text around the formulas takes the font at your cursor. macOS asks once whether VoiceBud may control Word.",

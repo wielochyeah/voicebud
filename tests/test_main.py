@@ -205,7 +205,7 @@ class ProcessTest(unittest.TestCase):
         self.assertIn("σ²", r["plain"])
         self.assertIn("zₐ = (a − μ)/σ", r["plain"])
         self.assertEqual(r["html"].count("<math"), 2)
-        self.assertEqual(rows[-1]["mode"], "ocr")
+        self.assertEqual((rows[-1]["mode"], rows[-1]["lang"]), ("ocr", "formula"))
         self.assertIn("\\frac", rows[-1]["final"])
         self.vb.cleaner.formula = lambda path: None
         self.vb._read_formula({"type": "formula", "id": 4, "path": "/tmp/x.png"})

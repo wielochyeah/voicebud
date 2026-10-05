@@ -1133,6 +1133,9 @@ struct HubHistoryPane: View {
     let model: HubModel
     @State private var hovered: Int64?
     @State private var expanded: Set<Int64> = []
+    /// rows showing their whole text (05.10., Nils: recognized texts and unchanged dictations had
+    /// no way to open beyond two lines)
+    @State private var opened: Set<Int64> = []
     @State private var copied: Int64?
     @FocusState private var searchFocused: Bool
     @Environment(\.hubStatic) private var isStatic
@@ -1141,7 +1144,7 @@ struct HubHistoryPane: View {
     var body: some View {
         let t = HubTheme(scheme)
         VStack(spacing: 0) {
-            HubPaneHeader(pane: .verlauf) { searchField(t) }
+            HubPaneHeader(pane: model.ocrPane ? .texterkennung : .verlauf) { searchField(t) }
             if model.query.isEmpty ? model.totalCount > 0 : !model.entries.isEmpty { statsLine(t) }
             if model.entries.isEmpty {
                 emptyState(t)
@@ -1235,6 +1238,7 @@ struct HubHistoryPane: View {
                             entry: entry,
                             hovered: isHovered(entry.id),
                             expanded: expanded.contains(entry.id) || model.previewExpanded.contains(entry.id),
+                            opened: opened.contains(entry.id),
                             copied: copied == entry.id,
                             separator: prev != nil && !isHovered(entry.id) && !isHovered(prev!),
                             onHover: { inside in
@@ -1244,6 +1248,16 @@ struct HubHistoryPane: View {
                             onOriginal: {
                                 withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) {
                                     if expanded.contains(entry.id) { expanded.remove(entry.id) } else { expanded.insert(entry.id) }
+                                }
+                            },
+                            onOpen: {
+                                withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) {
+                                    if opened.contains(entry.id) || expanded.contains(entry.id) {
+                                        opened.remove(entry.id)
+                                        expanded.remove(entry.id)
+                                    } else {
+                                        opened.insert(entry.id)
+                                    }
                                 }
                             })
                         .onAppear { if entry.id == model.entries.last?.id { model.loadMore() } }
@@ -1322,14 +1336,51 @@ struct HubHistoryRow: View {
     let entry: HistoryEntry
     let hovered: Bool
     let expanded: Bool
+    var opened = false
     let copied: Bool
     let separator: Bool
     let onHover: (Bool) -> Void
     let onCopy: () -> Void
     let onOriginal: () -> Void
+    var onOpen: () -> Void = {}
     @Environment(\.colorScheme) private var scheme
 
     private var text: String { entry.final.isEmpty ? entry.raw : entry.final }
+    /// more than the two lines a closed row shows (a rough measure: long, or several lines)
+    private var long: Bool { text.count > 150 || text.contains("\n") }
+    private var open: Bool { opened || expanded }
+    /// a Markdown table with its cells padded to the column widths (for showing only; copying
+    /// keeps the Markdown that chat apps read)
+    static func aligned(_ text: String) -> String {
+        let lines = text.components(separatedBy: "\n")
+        func cells(_ l: String) -> [String] {
+            var t = l.trimmingCharacters(in: .whitespaces)
+            if t.hasPrefix("|") { t.removeFirst() }
+            if t.hasSuffix("|") { t.removeLast() }
+            return t.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+        }
+        let isRow = { (l: String) in l.trimmingCharacters(in: .whitespaces).hasPrefix("|") }
+        let isRule = { (l: String) in isRow(l) && l.allSatisfy { "|-: ".contains($0) } }
+        var widths: [Int] = []
+        for l in lines where isRow(l) && !isRule(l) {
+            for (i, c) in cells(l).enumerated() {
+                if i >= widths.count { widths.append(0) }
+                widths[i] = max(widths[i], c.count)
+            }
+        }
+        return lines.map { l in
+            guard isRow(l) else { return l }
+            if isRule(l) { return widths.map { String(repeating: "─", count: $0) }.joined(separator: "─┼─") }
+            let c = cells(l)
+            return widths.indices.map { i in
+                let v = i < c.count ? c[i] : ""
+                return v + String(repeating: " ", count: max(0, widths[i] - v.count))
+            }.joined(separator: " │ ")
+        }.joined(separator: "\n")
+    }
+
+    /// a recognized table: its columns line up only in a fixed-width font
+    private var table: Bool { entry.mode == .ocr && text.split(separator: "\n").contains { $0.hasPrefix("|") } }
     private var hasOriginal: Bool { !entry.raw.isEmpty && !entry.final.isEmpty && HubDiff.differs(entry.raw, entry.final) }
 
     var body: some View {
@@ -1343,16 +1394,16 @@ struct HubHistoryRow: View {
             HubAppIcon(name: entry.app)
                 .padding(.top, -2)
             VStack(alignment: .leading, spacing: 5) {
-                Text(text)
-                    .font(.system(size: 13.5))
+                Text(open && table ? Self.aligned(text) : text)
+                    .font(open && table ? .system(size: 12.5, design: .monospaced) : .system(size: 13.5))
                     .lineSpacing(2.5)
                     .foregroundStyle(t.fg)
-                    .lineLimit(expanded ? nil : 2)
+                    .lineLimit(open ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 // No middle dots (SPEC §0): the facts are separated by spacing alone.
                 HStack(spacing: 10) {
-                    HubModeBadge(mode: entry.mode)
+                    HubModeBadge(mode: entry.mode, formula: entry.lang == "formula")
                     if !entry.app.isEmpty { Text(entry.app) }
                     Text(HubFormat.words(entry.words))
                     if let s = entry.totalSeconds { Text(HubFormat.seconds(s)) }
@@ -1367,9 +1418,10 @@ struct HubHistoryRow: View {
             }
             HStack(spacing: 4) {
                 HubChip(title: copied ? L("Kopiert") : L("Kopieren"), symbol: copied ? "checkmark" : nil, action: onCopy)
+                if long { HubChip(title: open ? L("Zuklappen") : L("Aufklappen"), active: open, action: onOpen) }
                 if hasOriginal { HubChip(title: L("Original"), active: expanded, action: onOriginal) }
             }
-            .opacity(hovered || expanded ? 1 : 0)
+            .opacity(hovered || open ? 1 : 0)
             .animation(.easeOut(duration: 0.15), value: hovered)
         }
         .padding(.horizontal, 12)
@@ -1379,6 +1431,7 @@ struct HubHistoryRow: View {
             if separator { Rectangle().fill(t.separator).frame(height: 0.5).padding(.horizontal, 12) }
         }
         .contentShape(Rectangle())
+        .onTapGesture { if long { onOpen() } }       // a click on a long row opens or closes it
         .onHover(perform: onHover)
     }
 
@@ -1386,13 +1439,18 @@ struct HubHistoryRow: View {
 
 struct HubModeBadge: View {
     let mode: Mode
+    /// a recognized text read with ⌥ (history lang "formula"). Its "Formel" is spelled out here:
+    /// the table's "Formel" is the per-app choice, "Equation" in English
+    var formula = false
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let t = HubTheme(scheme)
         HStack(spacing: 5) {
             Circle().fill(t.modeDot(mode)).frame(width: 6, height: 6)
-            Text(mode == .dictate ? L("Diktat") : mode == .prompt ? L("Prompt") : L("Befehl")).fontWeight(.semibold).foregroundStyle(t.fg2)
+            Text(mode == .dictate ? L("Diktat") : mode == .prompt ? L("Prompt")
+                 : mode == .ocr ? (formula ? (Loc.shared.english ? "Formula" : "Formel") : L("Texterkennung")) : L("Befehl"))
+                .fontWeight(.semibold).foregroundStyle(t.fg2)
         }
     }
 }

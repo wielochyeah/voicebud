@@ -621,8 +621,9 @@ class VoiceBud:
             return
         seconds = float(msg.get("seconds") or 0.0)
         try:
+            # lang "formula": read with ⌥ (the hub's badge says Formel; lang is otherwise unused for ocr)
             self.history.add(ts=time.time(), mode="ocr", app=str(msg.get("app") or "") or None, raw=text, final=text,
-                             lang=None, audio_s=0.0, stt_s=round(seconds, 3), llm_s=0.0, total_s=round(seconds, 3),
+                             lang="formula" if msg.get("formula") else None, audio_s=0.0, stt_s=round(seconds, 3), llm_s=0.0, total_s=round(seconds, 3),
                              words=sum(1 for w in text.split() if any(c.isalnum() for c in w)))  # not "|" or "---"
             self.ui.history_changed()
         except Exception:
@@ -657,7 +658,7 @@ class VoiceBud:
         print(f"formula: {len(r['markdown'])} chars in {seconds:.1f}s (load {stats.get('load', 0)}s, "
               f"vision {stats.get('vision_load', 0)}s, {stats.get('tokens', 0)} tokens)")
         self._ocr_result({"text": r["markdown"], "app": msg.get("app"), "bundle": msg.get("bundle"),
-                          "seconds": seconds})
+                          "seconds": seconds, "formula": True})
 
     def _slow_hint_shown(self):
         """The island now offers to cancel the take it shows (UI message slow_hint)."""
