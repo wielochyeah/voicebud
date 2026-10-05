@@ -13,3 +13,6 @@ packaging/cache/
 # that contain the dictated texts
 bakeoff/audio/
 tests/bench-results/
+
+# Claude Code worktrees of helper agents
+.claude/
