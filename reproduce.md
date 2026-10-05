@@ -38,6 +38,10 @@ source .venv/bin/activate
 
 # Install all Python libraries the app needs
 pip install -r requirements.txt
+
+# The formula reader (shift+cmd+2, then option): only the package itself, its optional
+# extras (servers, audio, video) are not needed
+pip install --no-deps mlx-vlm==0.7.4
 ```
 
 ## 3. Run it

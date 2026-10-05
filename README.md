@@ -65,10 +65,28 @@ Drag over any part of the screen and the text lands on the clipboard, a replacem
 - **Structure stays:** Paragraphs, lists and tables keep their structure. Tables paste as real tables into Notes, Mail, Numbers or Excel, and as Markdown into chat apps like Claude or ChatGPT.
 - **Terminals and code editors:** Every line stays a line, indentation included.
 - **Icons:** They are not read as stray characters.
+- **Cut lines:** A line that the edge of your selection cuts through is left out instead of being read as garbage.
 
 ![Choosing a region](docs/screenshots/text-recognition-select.jpg)
 
 ![A table recognised](docs/screenshots/text-recognition-table.jpg)
+
+#### Formulas: tap `option` while choosing
+
+Press `shift+cmd+2`, tap `option` once, then drag. The island switches to "Select formula" and the region is read by the vision part of the same local model that cleans up your dictation: fractions, powers, roots, sums, integrals and Greek letters, together with the text around them.
+
+![Choosing a region with formulas](docs/screenshots/formula-select.jpg)
+
+What lands on the clipboard depends on where you paste:
+- **Claude, ChatGPT, browsers, Notion, Obsidian, code editors:** Markdown with LaTeX (`$\sigma^2$`, `$$z_a = \frac{a - \mu}{\sigma}$$`), which they show as formulas or keep as source.
+- **Word:** real, editable equations.
+- **Notes, Mail and everything else:** readable characters, for example σ², √(x + 1), (a − μ)/σ.
+
+![A formula recognised](docs/screenshots/formula-done.jpg)
+
+![Pasted into Word as real equations](docs/screenshots/formula-word.jpg)
+
+The plain `shift+cmd+2` stays exactly as fast as before; formulas take 1.5 to 3 seconds, about 4 seconds the first time after a pause while the model loads. The vision part shares the language model's weights, so it adds about 1 GB of memory only while it is in use and nothing when idle.
 
 ### Screen context
 

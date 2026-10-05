@@ -8,3 +8,5 @@ pyobjc-framework-ApplicationServices
 pyyaml
 requests
 numpy
+pillow
+latex2mathml
