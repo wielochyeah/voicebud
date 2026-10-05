@@ -58,7 +58,7 @@ class FormulaTests(unittest.TestCase):
 
     def test_markdown_is_tidied(self):
         self.assertEqual(f.markdown("```markdown\n$x^2$\n```"), "$x^2$")
-        self.assertEqual(f.markdown(r"\[ x \] and \( y \)"), "$$ x $$ and $ y $")
+        self.assertEqual(f.markdown(r"\[ x \] and \( y \)"), "$$x$$ and $y$")
         self.assertTrue(f.has_math("a $b$ c"))
         self.assertFalse(f.has_math("costs 5 \\$ and 6 \\$"))
 
@@ -72,6 +72,12 @@ class FormulaTests(unittest.TestCase):
         h = f.html(r"$$\begin{aligned} a &= b \\ c &= d \end{aligned}$$")
         self.assertNotIn("<mi>&</mi>", h)
         self.assertNotIn("<mo>&</mo>", h)
+
+    def test_latex_brackets_and_escaped_dollars(self):
+        r = f.renditions(r"Die Varianz \( \sigma^2 \) ist wichtig.")
+        self.assertEqual(r["plain"], "Die Varianz σ² ist wichtig.")
+        self.assertEqual(r["html"].count("<math"), 1)
+        self.assertEqual(f.plain(r"Der Barwert $PV = \$100 \cdot (1+r)^{-n}$ gilt."), "Der Barwert PV = $100 · (1+r)⁻ⁿ gilt.")
 
     def test_renditions(self):
         r = f.renditions(BLOCK)

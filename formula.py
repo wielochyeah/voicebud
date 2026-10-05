@@ -24,15 +24,15 @@ def markdown(answer):
     m = _FENCE.match(text)
     if m:
         text = m.group(1).strip()
-    text = re.sub(r"\\\[(.+?)\\\]", lambda m: "$$" + m.group(1) + "$$", text, flags=re.S)
-    text = re.sub(r"\\\((.+?)\\\)", lambda m: "$" + m.group(1) + "$", text, flags=re.S)
+    text = re.sub(r"\\\[(.+?)\\\]", lambda m: "$$" + m.group(1).strip() + "$$", text, flags=re.S)
+    text = re.sub(r"\\\((.+?)\\\)", lambda m: "$" + m.group(1).strip() + "$", text, flags=re.S)
     return text
 
 
 # $$…$$ (may span lines) or $…$ on one line, opened before and closed after a non-space and not
 # followed by a digit (the rule of pandoc and the chat apps: "5 $ und 6 $" is no formula); a "\$"
 # is a dollar sign
-_MATH = re.compile(r"\$\$((?s:.+?))\$\$|(?<![\\$])\$(?=[^\s$])([^\n$]*?[^\s\\$])\$(?![\d$])")
+_MATH = re.compile(r"\$\$((?s:.+?))\$\$|(?<![\\$])\$(?=[^\s$])((?:\\[^\n]|[^\n$\\])*?(?:\\\S|[^\s\\$]))\$(?![\d$])")
 
 
 def _split(text):
@@ -282,7 +282,8 @@ def _mathml(tex, display):
     except ImportError:      # an install without it: Word gets the readable characters instead
         return None
     # latex2mathml reads aligned/split/gathered as plain rows with a literal & (Word showed it)
-    tex = re.sub(r"\\(begin|end)\{(aligned|split|gathered)\}", lambda m: f"\\{m.group(1)}{{align*}}", tex)
+    tex = re.sub(r"\\(begin|end)\{(aligned|split)\}", lambda m: f"\\{m.group(1)}{{align*}}", tex)
+    tex = tex.replace("\\begin{gathered}", "\\begin{array}{c}").replace("\\end{gathered}", "\\end{array}")
     try:
         out = convert(tex, display="block" if display else "inline")
     except Exception:         # a construct it does not know: that formula as readable characters

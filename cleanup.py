@@ -26,11 +26,11 @@ _QUOTES = "\"„“”«»'‚‘’"
 # an instruction that names a language asks for that language (also "eine englische Version",
 # "auf Spanisch"): then a changed language is the point, not a flip
 _TRANSLATE = re.compile(r"übersetz|translat|\b(deutsch|englisch|französisch|spanisch|italienisch|portugiesisch|"
-                        r"niederländisch|polnisch|türkisch|russisch|ukrainisch|chinesisch|japanisch|arabisch)\w*|"
+                        r"niederländisch|polnisch|türkisch|russisch|ukrainisch|chinesisch|japanisch|arabisch)(e[mnrs]?)?\b|"
                         r"\b(english|german|french|spanish|italian|portuguese|dutch|polish|turkish|russian|"
                         r"ukrainian|chinese|japanese|arabic)\b", re.I)
 _META = re.compile(r"\bnicht im (markierten |obigen |vorliegenden )?Text (angegeben|enthalten|erwähnt|genannt)\b|"
-                   r"\bim (markierten |obigen |vorliegenden )?Text (wird |ist |werden |sind )?(nicht|keine?[nrs]?)( \w+){0,3} "
+                   r"\bim (markierten |obigen |vorliegenden )?Text (wird |ist |werden |sind )?(\w+ ){0,3}?(nicht|keine?[nrs]?)( \w+){0,3} "
                    r"(angegeben|enthalten|erwähnt|genannt)\b|"
                    r"\bnot (mentioned|specified|stated|included) in the (selected |given )?text\b|"
                    r"\bthe (selected |given )?text (does not|doesn't) (contain|mention|say)\b|"
@@ -45,9 +45,9 @@ def _text_lang(text):
     (a German note quoting an English mail is neither)."""
     words = re.findall(r"[a-zäöüß]+", text.lower())
     de, en = sum(w in _DE_WORDS for w in words), sum(w in _EN_WORDS for w in words)
-    if de >= 2 and en * 4 <= de:
+    if de >= 1 and en * 4 <= de:
         return "de"
-    if en >= 2 and de * 4 <= en:
+    if en >= 1 and de * 4 <= en:
         return "en"
     return None
 
@@ -303,11 +303,18 @@ class Cleaner:
                                "max_tokens": max_tokens, "temp": temp, "loop_guard": loop_guard,
                                "spec": ticket is not None}):
                 return None
-            answered = slot[0].wait(timeout)
             # a formula read ahead of it (one request at a time in the worker): its time is not
-            # this request's, so it is waited for instead of killing the worker and the formula
-            while not answered and any(tag == "formula" for tag in list(self._tags.values())):
-                answered = slot[0].wait(timeout)
+            # this request's, so the clock starts again as long as one is open, instead of killing
+            # the worker and the formula
+            deadline, answered = time.time() + timeout, False
+            while not answered:
+                answered = slot[0].wait(min(0.25, max(0.0, deadline - time.time())))
+                if answered:
+                    break
+                if any(tag == "formula" for tag in list(self._tags.values())):
+                    deadline = time.time() + timeout
+                elif time.time() >= deadline:
+                    break
             if not answered:
                 if ticket is not None:    # speculative: it only waited behind real work; never kill
                     self.cancel(ticket)

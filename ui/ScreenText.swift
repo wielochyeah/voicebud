@@ -72,6 +72,8 @@ final class ScreenText {
     private var pendingSince: Date?
     /// ⌥ pressed while choosing (or held when the region was taken): read it as formulas
     private var formula = false
+    private var optionSeen = false
+    private var optionSpoiled = false
     private var optionTimer: Timer?
     /// unique per read (a respawned UI must not take an old answer for a new region)
     private var formulaID = ""
@@ -225,7 +227,7 @@ final class ScreenText {
     private func captured(_ path: URL) {
         capture = nil
         selecting = false
-        let asFormula = formula || (!dictationBusy && NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask) == .option)
+        let asFormula = formula || (!dictationBusy && NSEvent.modifierFlags.intersection(Self.keys) == .option)
         stopWatchingOption()
         IPC.island?.excludeFromCapture(false)
         guard FileManager.default.fileExists(atPath: path.path) else {
@@ -347,6 +349,8 @@ final class ScreenText {
     /// NSEvent's modifier state is read, not watched: no event monitor and no extra permission
     private func watchOption() {
         formula = false
+        optionSeen = false
+        optionSpoiled = false
         state.ocrFormula = false
         optionTimer?.invalidate()
         let t = Timer(timeInterval: 0.04, repeats: true) { _ in
@@ -361,18 +365,31 @@ final class ScreenText {
         optionTimer = nil
     }
 
-    /// any press of ⌥ while choosing turns formulas on, and they stay on (05.10., Nils: a toggle
-    /// ended "off" after several taps; Esc is the way out, as always). ⌥ alone: ⌃⌥ is the prompt
-    /// hotkey, and a take may start while the crosshair is out
+    /// ⌥ pressed and let go on its own while choosing turns formulas on, and they stay on (05.10.,
+    /// Nils: a toggle ended "off" after several taps; Esc is the way out, as always). Not when it
+    /// came with another key, in any order: ⌃⌥ is the prompt hotkey, and a take may start while
+    /// the crosshair is out. Caps Lock and the like do not count.
     private func pollOption() {
         guard selecting else { return stopWatchingOption() }
-        guard !formula, !dictationBusy,
-              NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask) == .option else { return }
-        formula = true
-        withAnimation(IslandMotion.swap) { state.ocrFormula = true }      // the capsule glides narrower
-        IPC.send(["type": "formula_warm"])              // the model loads while the user drags
-        IPC.log("screen text: formulas on")
+        guard !formula else { return }
+        let flags = NSEvent.modifierFlags.intersection(Self.keys)
+        if flags.isEmpty {
+            if optionSeen && !optionSpoiled && !dictationBusy {
+                formula = true
+                withAnimation(IslandMotion.swap) { state.ocrFormula = true }      // the capsule glides narrower
+                IPC.send(["type": "formula_warm"])          // the model loads while the user drags
+                IPC.log("screen text: formulas on")
+            }
+            optionSeen = false
+            optionSpoiled = false
+        } else if flags == .option {
+            optionSeen = true
+        } else if optionSeen || flags.contains(.option) {
+            optionSpoiled = true
+        }
     }
+
+    static let keys: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
 
     private func deliver(_ r: Result) {
         publish(r)
