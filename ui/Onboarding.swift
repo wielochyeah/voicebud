@@ -113,7 +113,7 @@ final class OnboardingModel {
         case dodge, auto, takeover
     }
 
-    static let sampleTake = "Ich teste gerade VoiceBud und bin gespannt, wie gut das mit meiner Stimme klappt."
+    static var sampleTake: String { L("Ich teste gerade VoiceBud und bin gespannt, wie gut das mit meiner Stimme klappt.") }
 
     var step: Step = .welcome
     /// direction of the last step change (drives the slide direction)
@@ -138,7 +138,7 @@ final class OnboardingModel {
     /// write them through `receiveLevels` so the silent-mic check sees them
     private(set) var micLevels: [Float] = Array(repeating: 0, count: 7)
     @ObservationIgnored private(set) var peakLevel: Float = 0
-    var micDevice = "MacBook Pro-Mikrofon"
+    var micDevice = L("MacBook Pro-Mikrofon")
     var test: TestPhase = .ready
     /// no signal 3 s into the test dictation: the footnote turns into the "Balken flach" help
     var flatSignal = false
@@ -184,9 +184,9 @@ final class OnboardingModel {
     }
 
     var advanceTitle: String {
-        if isLast { return "Los geht’s" }
-        if step == .testDictation && !testDone { return "Überspringen" }
-        return "Weiter"
+        if isLast { return L("Los geht’s") }
+        if step == .testDictation && !testDone { return L("Überspringen") }
+        return L("Weiter")
     }
 
     func next() {
@@ -412,7 +412,7 @@ final class OnboardingController: NSObject, NSWindowDelegate {
                          backing: .buffered, defer: false)
         w.contentViewController = host
         w.setContentSize(size)
-        w.title = "VoiceBud einrichten"
+        w.title = L("VoiceBud einrichten")
         w.titleVisibility = .hidden
         w.titlebarAppearsTransparent = true
         w.isMovableByWindowBackground = true
@@ -596,7 +596,7 @@ struct OnboardingFooter: View {
             OnboardingProgress(count: model.steps.count, index: model.position)
             HStack(spacing: 0) {
                 if !model.isFirst {
-                    Button("Zurück") { model.back() }
+                    Button(L("Zurück")) { model.back() }
                         .buttonStyle(OnboardingButtonStyle(kind: .secondary))
                         .transition(.opacity)
                 }
@@ -629,7 +629,7 @@ struct OnboardingProgress: View {
             }
         }
         .accessibilityElement()
-        .accessibilityLabel("Schritt \(index + 1) von \(count)")
+        .accessibilityLabel(L("Schritt %d von %d", index + 1, count))
     }
 }
 
@@ -867,11 +867,12 @@ enum OnboardingKeys {
     /// what is printed on the physical key of a German Mac keyboard (shift only has the arrow
     /// there; "shift" is the name people use for it)
     static func word(_ glyph: String) -> String {
+        // English: the words on a US/UK Mac keyboard (control, option, command)
         switch glyph {
-        case "⌃": return "ctrl"
+        case "⌃": return L("ctrl")
         case "⇧": return "shift"
-        case "⌥": return "alt"
-        case "⌘": return "cmd"
+        case "⌥": return L("alt")
+        case "⌘": return L("cmd")
         default: return ""
         }
     }
@@ -1064,14 +1065,14 @@ struct OnboardingWelcome: View {
                     .font(OnboardingType.introTitle)
                     .foregroundStyle(t.fg)
                 // intro lede: the one place with a larger sentence, like the intro title
-                Text("Du sprichst, VoiceBud schreibt.\nAlles bleibt auf deinem Mac.")
+                Text(L("Du sprichst, VoiceBud schreibt.\nAlles bleibt auf deinem Mac."))
                     .font(.system(size: 15))
                     .foregroundStyle(t.prose)
                     .multilineTextAlignment(.center)
                     .lineSpacing(3)
             }
             Spacer(minLength: 0)
-            Text("Auf Macs ohne Notch erscheint VoiceBud als Kapsel unter der Menüleiste.")
+            Text(L("Auf Macs ohne Notch erscheint VoiceBud als Kapsel unter der Menüleiste."))
                 .font(OnboardingType.secondary)
                 .foregroundStyle(t.prose)
                 .padding(.bottom, OnboardingGap.m)
@@ -1086,11 +1087,11 @@ struct OnboardingWelcome: View {
 struct OnboardingHero: View {
     static let size = CGSize(width: 672, height: 200)
     static let notch = CGSize(width: 185, height: 32)
-    static let done: DoneInfo = {
-        let text = "Morgen um zehn mit Lena die Folien durchgehen."
-        return DoneInfo(app: "Notizen", words: text.split(whereSeparator: \.isWhitespace).count, seconds: 0.4,
+    static var done: DoneInfo {
+        let text = L("Morgen um zehn mit Lena die Folien durchgehen.")
+        return DoneInfo(app: L("Notizen"), words: text.split(whereSeparator: \.isWhitespace).count, seconds: 0.4,
                         preview: text, toClipboard: false)
-    }()
+    }
 
     /// non-nil: a render, frozen at this phase; nil: the live loop
     let still: Phase?
@@ -1239,7 +1240,7 @@ struct OnboardingMenuBar: View {
         HStack(spacing: 0) {
             HStack(spacing: 17) {
                 Image(systemName: "apple.logo").font(.system(size: 13.5))
-                Text("Notizen").font(.system(size: 13, weight: .bold))
+                Text(L("Notizen")).font(.system(size: 13, weight: .bold))
             }
             .padding(.leading, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1266,32 +1267,32 @@ struct OnboardingHowItWorks: View {
 
     var body: some View {
         OnboardingPage {
-            OnboardingHeader(title: "So funktioniert’s", subtitle: "Drei Tastenkürzel, die in jeder App funktionieren.")
+            OnboardingHeader(title: L("So funktioniert’s"), subtitle: L("Drei Tastenkürzel, die in jeder App funktionieren."))
                 .padding(.bottom, OnboardingGap.l)
             HubCard {
-                OnboardingGestureRow(title: "Diktieren",
-                                     text: "Drücken, sprechen, noch einmal drücken.\nDer Text landet an deinem Cursor.") {
+                OnboardingGestureRow(title: L("Diktieren"),
+                                     text: L("Drücken, sprechen, noch einmal drücken.\nDer Text landet an deinem Cursor.")) {
                     OnboardingKeyCaps(keys: HubFormat.hotkey(model.hotkeys["dictate"] ?? "ctrl+shift"))
                 } preview: {
                     OnboardingMiniIsland(mode: .dictate)
                 }
                 HubSeparator()
-                OnboardingGestureRow(title: "Prompt erstellen",
-                                     text: "Sag grob, was du von einer KI willst.\nVoiceBud schreibt daraus einen klaren Prompt.") {
+                OnboardingGestureRow(title: L("Prompt erstellen"),
+                                     text: L("Sag grob, was du von einer KI willst.\nVoiceBud schreibt daraus einen klaren Prompt.")) {
                     OnboardingKeyCaps(keys: HubFormat.hotkey(model.hotkeys["prompt"] ?? "ctrl+alt"))
                 } preview: {
                     OnboardingMiniIsland(mode: .prompt)
                 }
                 HubSeparator()
-                OnboardingGestureRow(title: "Text umschreiben",
-                                     text: "Text markieren, halten und sagen, was passieren soll.\nEtwa „mach das kürzer“ oder „förmlicher“.") {
+                OnboardingGestureRow(title: L("Text umschreiben"),
+                                     text: L("Text markieren, halten und sagen, was passieren soll.\nEtwa „mach das kürzer“ oder „förmlicher“.")) {
                     OnboardingKeyCaps(keys: HubFormat.hotkey(model.hotkeys["command"] ?? "ctrl+cmd"))
                 } preview: {
                     OnboardingMiniIsland(mode: .command)
                 }
             }
             .frame(width: OnboardingLayout.column)
-            OnboardingFootnote("Fährst du mit der Maus über die Meldung in der Notch, klappt der ganze Text auf.", lines: 1)
+            OnboardingFootnote(L("Fährst du mit der Maus über die Meldung in der Notch, klappt der ganze Text auf."), lines: 1)
                 .frame(width: OnboardingLayout.column)
         }
     }
@@ -1385,8 +1386,8 @@ struct OnboardingMiniIsland: View {
     @Environment(\.hubStatic) private var isStatic
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    static let dictation = "Morgen um zehn mit Lena die Folien durchgehen."
-    static let prompt = ["Rolle: Lektor", "Aufgabe: Mail an Lena kürzen", "Format: drei Sätze"]
+    static var dictation: String { L("Morgen um zehn mit Lena die Folien durchgehen.") }
+    static var prompt: [String] { [L("Rolle: Lektor"), L("Aufgabe: Mail an Lena kürzen"), L("Format: drei Sätze")] }
 
     private var current: Beat { isStatic ? (mode == .prompt ? .card : .recording) : (beat ?? .closed) }
 
@@ -1478,17 +1479,17 @@ struct OnboardingMiniIsland: View {
                         .frame(height: 8)
                         .background(RoundedRectangle(cornerRadius: 2, style: .continuous).fill(.white.opacity(0.16)))
                 } else {
-                    Text("0,4 s").font(.system(size: 6.5)).foregroundStyle(.white.opacity(0.5))
+                    Text(L("0,4 s")).font(.system(size: 6.5)).foregroundStyle(.white.opacity(0.5))
                 }
             }
             .frame(height: OnboardingMini.notch.height)
             if mode == .prompt {
-                OnboardingMini.title("Prompt in der Zwischenablage", meta: nil)
+                OnboardingMini.title(L("Prompt in der Zwischenablage"), meta: nil)
                 ForEach(Self.prompt, id: \.self) { line in
                     Text(line).font(.system(size: OnboardingMini.text)).foregroundStyle(.white.opacity(0.88))
                 }
             } else {
-                OnboardingMini.title("Eingefügt in Notizen", meta: OnboardingMini.words(Self.dictation))
+                OnboardingMini.title(L("Eingefügt in Notizen"), meta: OnboardingMini.words(Self.dictation))
                 Text(Self.dictation)
                     .font(.system(size: OnboardingMini.text))
                     .foregroundStyle(.white.opacity(0.88))
@@ -1508,7 +1509,7 @@ struct OnboardingMiniHover: View {
     @Environment(\.hubStatic) private var isStatic
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    static let text = "Morgen um zehn mit Lena die Folien durchgehen. Danach schicke ich die Zahlen ans Team."
+    static var text: String { L("Morgen um zehn mit Lena die Folien durchgehen. Danach schicke ich die Zahlen ans Team.") }
 
     var body: some View {
         let o = isStatic || over
@@ -1554,10 +1555,10 @@ struct OnboardingMiniHover: View {
             HStack(spacing: 0) {
                 OnboardingMini.check(.dictate)
                 Spacer(minLength: 0)
-                Text("0,7 s").font(.system(size: 6.5)).foregroundStyle(.white.opacity(0.5))
+                Text(L("0,7 s")).font(.system(size: 6.5)).foregroundStyle(.white.opacity(0.5))
             }
             .frame(height: OnboardingMini.notch.height)
-            OnboardingMini.title("Eingefügt in Mail", meta: OnboardingMini.words(Self.text))
+            OnboardingMini.title(L("Eingefügt in Mail"), meta: OnboardingMini.words(Self.text))
             ZStack(alignment: .topLeading) {
                 if open {
                     VStack(alignment: .leading, spacing: 4) {
@@ -1566,7 +1567,7 @@ struct OnboardingMiniHover: View {
                             .fixedSize(horizontal: false, vertical: true)
                         HStack(spacing: 2) {
                             Image(systemName: "doc.on.doc").font(.system(size: 5, weight: .semibold))
-                            Text("Kopieren").font(.system(size: 6, weight: .medium))
+                            Text(L("Kopieren")).font(.system(size: 6, weight: .medium))
                         }
                         .padding(.horizontal, 4)
                         .frame(height: 10)
@@ -1604,7 +1605,7 @@ struct OnboardingPermissionStep: View {
             HubSquircle(icon: icon, size: 64)
                 .shadow(color: .black.opacity(t.dark ? 0.3 : 0.12), radius: 6, y: 3)
                 .padding(.bottom, OnboardingGap.m)
-            OnboardingHeader(title: step.title, subtitle: sentence)
+            OnboardingHeader(title: L(step.title), subtitle: sentence)
                 .padding(.bottom, OnboardingGap.l)
             // one slot that changes state in place: nothing below it moves
             ZStack {
@@ -1635,39 +1636,39 @@ struct OnboardingPermissionStep: View {
     private var sentence: String {
         switch permission {
         case .microphone:
-            return "VoiceBud braucht deine Erlaubnis, um dich zu hören.\nDas Mikrofon läuft nur, während du diktierst."
+            return L("VoiceBud braucht deine Erlaubnis, um dich zu hören.\nDas Mikrofon läuft nur, während du diktierst.")
         case .accessibility:
-            return "VoiceBud braucht deine Erlaubnis, um Text an deinem Cursor einzufügen\nund zu sehen, in welcher App du schreibst."
+            return L("VoiceBud braucht deine Erlaubnis, um Text an deinem Cursor einzufügen\nund zu sehen, in welcher App du schreibst.")
         case .inputMonitoring:
-            return "VoiceBud braucht deine Erlaubnis, um deine\nTastenkürzel in jeder App zu erkennen."
+            return L("VoiceBud braucht deine Erlaubnis, um deine\nTastenkürzel in jeder App zu erkennen.")
         }
     }
 
     @ViewBuilder private var slot: some View {
         HStack(spacing: OnboardingGap.s) {
             if restart {
-                OnboardingStatus(mark: .warn, text: "Wirkt nach Neustart", large: true)
-                Button("VoiceBud neu starten") { model.restartCore() }
+                OnboardingStatus(mark: .warn, text: L("Wirkt nach Neustart"), large: true)
+                Button(L("VoiceBud neu starten")) { model.restartCore() }
                     .buttonStyle(OnboardingButtonStyle(kind: .primary, minWidth: 150))
                     .keyboardShortcut(.defaultAction)
             } else {
                 switch grant {
                 case .missing:
-                    Button("Freigabe erteilen") { model.request(permission) }
+                    Button(L("Freigabe erteilen")) { model.request(permission) }
                         .buttonStyle(OnboardingButtonStyle(kind: .primary, minWidth: 150))
                         .keyboardShortcut(.defaultAction)
                 case .requested:
                     if permission == .microphone {
-                        OnboardingStatus(mark: .busy, text: "Wartet auf deine Antwort", large: true)
+                        OnboardingStatus(mark: .busy, text: L("Wartet auf deine Antwort"), large: true)
                     } else {
-                        OnboardingStatus(mark: .busy, text: "Wartet auf deinen Schalter", large: true)
+                        OnboardingStatus(mark: .busy, text: L("Wartet auf deinen Schalter"), large: true)
                         settingsButton
                     }
                 case .denied:
-                    OnboardingStatus(mark: .warn, text: "Abgelehnt", large: true)
+                    OnboardingStatus(mark: .warn, text: L("Abgelehnt"), large: true)
                     settingsButton
                 case .granted:
-                    OnboardingStatus(mark: .ok, text: "Erteilt", large: true)
+                    OnboardingStatus(mark: .ok, text: L("Erteilt"), large: true)
                 }
             }
         }
@@ -1675,7 +1676,7 @@ struct OnboardingPermissionStep: View {
     }
 
     private var settingsButton: some View {
-        Button("Systemeinstellungen öffnen") { model.openSettings(permission) }
+        Button(L("Systemeinstellungen öffnen")) { model.openSettings(permission) }
             .buttonStyle(OnboardingButtonStyle(kind: .secondary, minWidth: 150))
     }
 
@@ -1683,35 +1684,37 @@ struct OnboardingPermissionStep: View {
     private var lines: [String] {
         let name = model.tccName
         let asApp = name == "VoiceBud"
-        let quoted = "„\(name)“"
-        let alias = asApp ? "" : "\nUnter diesem Namen läuft VoiceBud im Hintergrund."
-        let restartNote = "Danach startest du VoiceBud einmal neu, mit einem Klick hier."
+        let quoted = L("„%@“", name)
+        let alias = asApp ? "" : "\n" + L("Unter diesem Namen läuft VoiceBud im Hintergrund.")
+        let restartNote = L("Danach startest du VoiceBud einmal neu, mit einem Klick hier.")
+        let openAndSwitch = L("Klick im Dialog auf „Systemeinstellungen öffnen“ und schalte dort %@ ein.", quoted) + alias
+        let switchOn = L("Schalte in den Systemeinstellungen %@ ein.", quoted) + alias
         switch permission {
         case .microphone:
             switch grant {
-            case .granted: return ["Weiter geht’s mit den Bedienungshilfen."]
-            case .denied: return ["Schalte in den Systemeinstellungen unter „Mikrofon“ den Eintrag \(quoted) ein.\(alias)"]
+            case .granted: return [L("Weiter geht’s mit den Bedienungshilfen.")]
+            case .denied: return [L("Schalte in den Systemeinstellungen unter „Mikrofon“ den Eintrag %@ ein.", quoted) + alias]
             case .missing, .requested:
                 return asApp
-                    ? ["macOS fragt gleich, ob VoiceBud dein Mikrofon nutzen darf.\nWähle „Erlauben“."]
-                    : ["macOS fragt gleich, ob \(quoted) dein Mikrofon nutzen darf.\nDas ist VoiceBud, wähle „Erlauben“."]
+                    ? [L("macOS fragt gleich, ob VoiceBud dein Mikrofon nutzen darf.\nWähle „Erlauben“.")]
+                    : [L("macOS fragt gleich, ob %@ dein Mikrofon nutzen darf.\nDas ist VoiceBud, wähle „Erlauben“.", quoted)]
             }
         case .accessibility:
             switch grant {
-            case .granted: return ["Weiter geht’s mit der Eingabeüberwachung."]
-            case .missing: return ["Klick im Dialog auf „Systemeinstellungen öffnen“ und schalte dort \(quoted) ein.\(alias)"]
+            case .granted: return [L("Weiter geht’s mit der Eingabeüberwachung.")]
+            case .missing: return [openAndSwitch]
             case .requested, .denied:
-                return ["Schalte in den Systemeinstellungen \(quoted) ein.\(alias)",
-                        "Steht \(quoted) nicht in der Liste? Klick auf [Im Finder zeigen](voicebud://reveal) und zieh die Datei hinein."]
+                return [switchOn,
+                        L("Steht %@ nicht in der Liste? Klick auf [Im Finder zeigen](voicebud://reveal) und zieh die Datei hinein.", quoted)]
             }
         case .inputMonitoring:
             if restart {
-                return ["Die Freigabe greift erst, wenn VoiceBud neu startet.\nDas dauert zwei Sekunden, dieses Fenster bleibt offen."]
+                return [L("Die Freigabe greift erst, wenn VoiceBud neu startet.\nDas dauert zwei Sekunden, dieses Fenster bleibt offen.")]
             }
             switch grant {
-            case .granted: return ["Weiter geht’s mit den Modellen."]
-            case .missing: return ["Klick im Dialog auf „Systemeinstellungen öffnen“ und schalte dort \(quoted) ein.\(alias)", restartNote]
-            case .requested, .denied: return ["Schalte in den Systemeinstellungen \(quoted) ein.\(alias)", restartNote]
+            case .granted: return [L("Weiter geht’s mit den Modellen.")]
+            case .missing: return [openAndSwitch, restartNote]
+            case .requested, .denied: return [switchOn, restartNote]
             }
         }
     }
@@ -1737,18 +1740,18 @@ struct OnboardingModels: View {
 
     private var note: String {
         if model.models.contains(where: { if case .paused = $0.phase { return true }; return false }) {
-            return "Keine Verbindung zum Internet.\nDer Download geht weiter, sobald du wieder online bist."
+            return L("Keine Verbindung zum Internet.\nDer Download geht weiter, sobald du wieder online bist.")
         }
         if model.models.contains(where: { if case .downloading = $0.phase { return true }; return false }) {
-            return "Du musst nicht warten, der Download läuft im Hintergrund."
+            return L("Du musst nicht warten, der Download läuft im Hintergrund.")
         }
-        return "Beide Modelle sind da. Ab jetzt braucht VoiceBud kein Internet mehr."
+        return L("Beide Modelle sind da. Ab jetzt braucht VoiceBud kein Internet mehr.")
     }
 
     var body: some View {
         OnboardingPage {
-            OnboardingHeader(title: "Modelle",
-                             subtitle: "Spracherkennung und Textaufbereitung laufen lokal.\nDie Modelle werden einmal geladen und bleiben auf deinem Mac.")
+            OnboardingHeader(title: L("Modelle"),
+                             subtitle: L("Spracherkennung und Textaufbereitung laufen lokal.\nDie Modelle werden einmal geladen und bleiben auf deinem Mac."))
                 .padding(.bottom, OnboardingGap.l)
             VStack(alignment: .leading, spacing: 0) {
                 HubCard {
@@ -1788,8 +1791,8 @@ struct OnboardingModelRow: View {
             HStack(spacing: OnboardingGap.s) {
                 HubSquircle(icon: icon, size: 28)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(item.role).font(OnboardingType.body).foregroundStyle(t.fg)
-                    Text(item.name).font(OnboardingType.secondary).foregroundStyle(t.prose)
+                    Text(L(item.role)).font(OnboardingType.body).foregroundStyle(t.fg)
+                    Text(L(item.name)).font(OnboardingType.secondary).foregroundStyle(t.prose)
                 }
                 Spacer(minLength: OnboardingGap.s)
                 trailing(t)
@@ -1818,17 +1821,17 @@ struct OnboardingModelRow: View {
                 Text(OnboardingFormat.gb(item.sizeGB))
                     .font(OnboardingType.secondary.monospacedDigit())
                     .foregroundStyle(t.prose)
-                OnboardingStatus(mark: .ok, text: "Bereit")
+                OnboardingStatus(mark: .ok, text: L("Bereit"))
             }
         case .downloading(let got, let total):
-            Text("\(OnboardingFormat.gbValue(got / 1000)) von \(OnboardingFormat.gb(total / 1000))")
+            Text(L("%@ von %@", OnboardingFormat.gbValue(got / 1000), OnboardingFormat.gb(total / 1000)))
                 .font(OnboardingType.secondary.monospacedDigit())
                 .foregroundStyle(t.prose)
                 .contentTransition(.numericText())
         case .paused:
             HStack(spacing: OnboardingGap.s) {
-                OnboardingStatus(mark: .warn, text: "Pausiert")
-                HubChip(title: "Erneut versuchen", symbol: "arrow.clockwise", action: retry)
+                OnboardingStatus(mark: .warn, text: L("Pausiert"))
+                HubChip(title: L("Erneut versuchen"), symbol: "arrow.clockwise", action: retry)
             }
         }
     }
@@ -1853,11 +1856,12 @@ struct OnboardingProgressBar: View {
 }
 
 enum OnboardingFormat {
-    /// "0,9 GB"
+    /// "0,9 GB" (English "0.9 GB")
     static func gb(_ v: Double) -> String { gbValue(v) + " GB" }
-    /// "1,1"
+    /// "1,1" (English "1.1")
     static func gbValue(_ v: Double) -> String {
-        String(format: "%.1f", v).replacingOccurrences(of: ".", with: ",")
+        let s = String(format: "%.1f", v)
+        return Loc.shared.english ? s : s.replacingOccurrences(of: ".", with: ",")
     }
 }
 
@@ -1874,8 +1878,8 @@ struct OnboardingTestDictation: View {
         let t = HubTheme(scheme)
         let keys = HubFormat.hotkey(model.hotkeys["dictate"] ?? "ctrl+shift")
         OnboardingPage {
-            OnboardingHeader(title: "Probediktat",
-                             subtitle: "Drück beide Tasten, sag einen Satz und drück sie noch einmal.")
+            OnboardingHeader(title: L("Probediktat"),
+                             subtitle: L("Drück beide Tasten, sag einen Satz und drück sie noch einmal."))
                 .padding(.bottom, OnboardingGap.l)
             OnboardingBigKeys(keys: keys, pressed: listening,
                               action: model.mock && !isStatic ? { model.simulateTest() } : nil)
@@ -1907,8 +1911,8 @@ struct OnboardingTestDictation: View {
 
     private var footnote: String {
         model.flatSignal
-            ? "Bleiben die Balken flach, kommt bei VoiceBud kein Ton an.\nWähl in den [Ton-Einstellungen](voicebud://sound) unter „Eingabe“ ein anderes Mikrofon."
-            : "Im Alltag landet der Text direkt an deinem Cursor, egal in welcher App."
+            ? L("Bleiben die Balken flach, kommt bei VoiceBud kein Ton an.\nWähl in den [Ton-Einstellungen](voicebud://sound) unter „Eingabe“ ein anderes Mikrofon.")
+            : L("Im Alltag landet der Text direkt an deinem Cursor, egal in welcher App.")
     }
 
     @ViewBuilder private func resultArea(_ t: HubTheme) -> some View {
@@ -1923,16 +1927,16 @@ struct OnboardingTestDictation: View {
         case .listening:
             HStack(spacing: OnboardingGap.s) {
                 OnboardingLevelBars(levels: model.micLevels, synthetic: model.mock)
-                Text("Ich höre zu").font(.system(size: 15)).foregroundStyle(t.prose)
+                Text(L("Ich höre zu")).font(.system(size: 15)).foregroundStyle(t.prose)
             }
         case .working:
             HStack(spacing: OnboardingGap.s) {
                 OnboardingSpinner(size: 14)
-                Text("Wird erkannt").font(.system(size: 15)).foregroundStyle(t.prose)
+                Text(L("Wird erkannt")).font(.system(size: 15)).foregroundStyle(t.prose)
             }
         case .ready:
             // placeholder, deliberately lighter than real copy
-            Text("Hier erscheint dein Text.")
+            Text(L("Hier erscheint dein Text."))
                 .font(.system(size: 15))
                 .foregroundStyle(t.fg3)
         }
@@ -1944,7 +1948,7 @@ struct OnboardingTestDictation: View {
             case .result(let text, let seconds):
                 HStack(spacing: 7) {
                     IslandCheckBadge(mode: .dictate).scaleEffect(0.8).frame(width: 16, height: 16)
-                    Text("in \(HubFormat.seconds(seconds)) erkannt")
+                    Text(L("in %@ erkannt", HubFormat.seconds(seconds)))
                         .font(OnboardingType.secondaryMedium)
                         .foregroundStyle(t.fg)
                     Text(HubFormat.words(text.split(whereSeparator: \.isWhitespace).count))
@@ -1953,17 +1957,17 @@ struct OnboardingTestDictation: View {
                         .padding(.leading, 4)
                 }
                 Spacer(minLength: OnboardingGap.xs)
-                HubChip(title: "Noch einmal", symbol: "arrow.clockwise") { model.retryTest() }
+                HubChip(title: L("Noch einmal"), symbol: "arrow.clockwise") { model.retryTest() }
             case .listening:
-                OnboardingStatus(mark: .rec, text: "Nimmt auf")
+                OnboardingStatus(mark: .rec, text: L("Nimmt auf"))
                 Spacer(minLength: OnboardingGap.xs)
                 device(t)
             case .working:
-                OnboardingStatus(mark: .busy, text: "Wird erkannt")
+                OnboardingStatus(mark: .busy, text: L("Wird erkannt"))
                 Spacer(minLength: OnboardingGap.xs)
                 device(t)
             case .ready:
-                OnboardingStatus(mark: .idle, text: "Wartet auf dein Diktat")
+                OnboardingStatus(mark: .idle, text: L("Wartet auf dein Diktat"))
                 Spacer(minLength: OnboardingGap.xs)
                 device(t)
             }
@@ -1997,7 +2001,7 @@ struct OnboardingBigKeys: View {
             }
         }
         .accessibilityElement()
-        .accessibilityLabel("Tastenkürzel \(keys.map(OnboardingKeys.word).joined(separator: " und "))")
+        .accessibilityLabel(L("Tastenkürzel %@", keys.map(OnboardingKeys.word).joined(separator: L(" und "))))
     }
 
     private var caps: some View {
@@ -2078,7 +2082,7 @@ struct OnboardingAppearance: View {
 
     var body: some View {
         OnboardingPage {
-            OnboardingHeader(title: "Darstellung", subtitle: "So zeigt sich VoiceBud, während du sprichst.")
+            OnboardingHeader(title: L("Darstellung"), subtitle: L("So zeigt sich VoiceBud, während du sprichst."))
                 .padding(.bottom, OnboardingGap.l)
             VStack(alignment: .leading, spacing: 0) {
                 // the hub's live stage: island and capsule morph with every choice
@@ -2086,14 +2090,14 @@ struct OnboardingAppearance: View {
                     .padding(.bottom, OnboardingGap.s)
                 HubCard {
                     OnboardingTilePicker(
-                        options: [OnboardingTileOption(value: IslandStyle.insel, title: "Insel an der Notch"),
-                                  OnboardingTileOption(value: IslandStyle.kapsel, title: "Kapsel")],
+                        options: [OnboardingTileOption(value: IslandStyle.insel, title: L("Insel an der Notch")),
+                                  OnboardingTileOption(value: IslandStyle.kapsel, title: L("Kapsel"))],
                         selection: model.islandShape,
                         select: { v in model.islandShape = v; model.choicesChanged() }) { style in
                         HubIslandTile(style: style, wave: .sym)
                     }
                 }
-                OnboardingFootnote("Live-Text beim Sprechen kannst du später in den Einstellungen einschalten.")
+                OnboardingFootnote(L("Live-Text beim Sprechen kannst du später in den Einstellungen einschalten."))
             }
             .frame(width: OnboardingLayout.column)
         }
@@ -2107,14 +2111,14 @@ struct OnboardingAlcove: View {
 
     var body: some View {
         OnboardingPage {
-            OnboardingHeader(title: "Alcove", subtitle: "Alcove nutzt die Notch auch.\nWähle, wie sich die beiden die Notch teilen.")
+            OnboardingHeader(title: "Alcove", subtitle: L("Alcove nutzt die Notch auch.\nWähle, wie sich die beiden die Notch teilen."))
                 .padding(.bottom, OnboardingGap.l)
             VStack(alignment: .leading, spacing: 0) {
                 HubCard {
                     OnboardingTilePicker(
-                        options: [OnboardingTileOption(value: OnboardingModel.AlcoveChoice.dodge, title: "Ausweichen"),
-                                  OnboardingTileOption(value: .auto, title: "Automatisch", badge: "Empfohlen"),
-                                  OnboardingTileOption(value: .takeover, title: "Übernehmen")],
+                        options: [OnboardingTileOption(value: OnboardingModel.AlcoveChoice.dodge, title: L("Ausweichen")),
+                                  OnboardingTileOption(value: .auto, title: L("Automatisch"), badge: L("Empfohlen")),
+                                  OnboardingTileOption(value: .takeover, title: L("Übernehmen"))],
                         selection: model.alcove, tileHeight: 64,
                         select: { v in model.alcove = v; model.choicesChanged() }) { choice in
                         OnboardingAlcoveTile(choice: choice)
@@ -2129,9 +2133,9 @@ struct OnboardingAlcove: View {
 
     private var note: String {
         switch model.alcove {
-        case .dodge: return "Alcove behält die Notch. VoiceBud erscheint als Kapsel direkt darunter."
-        case .auto: return "VoiceBud sitzt in der Notch, solange Alcove nichts zeigt.\nSpielt Alcove etwas ab, rutscht VoiceBud darunter."
-        case .takeover: return "Während du diktierst, gehört die Notch VoiceBud."
+        case .dodge: return L("Alcove behält die Notch. VoiceBud erscheint als Kapsel direkt darunter.")
+        case .auto: return L("VoiceBud sitzt in der Notch, solange Alcove nichts zeigt.\nSpielt Alcove etwas ab, rutscht VoiceBud darunter.")
+        case .takeover: return L("Während du diktierst, gehört die Notch VoiceBud.")
         }
     }
 }
@@ -2179,31 +2183,31 @@ struct OnboardingContext: View {
 
     var body: some View {
         OnboardingPage {
-            OnboardingHeader(title: "Mitlesen",
-                             subtitle: "VoiceBud liest mit, damit Namen und Fachbegriffe stimmen.\nDu entscheidest, wie viel.")
+            OnboardingHeader(title: L("Mitlesen"),
+                             subtitle: L("VoiceBud liest mit, damit Namen und Fachbegriffe stimmen.\nDu entscheidest, wie viel."))
                 .padding(.bottom, OnboardingGap.l)
             VStack(alignment: .leading, spacing: 0) {
                 HubCard {
                     OnboardingTilePicker(
-                        options: [OnboardingTileOption(value: OnboardingModel.ContextLevel.app, title: "Nur die App",
-                                                       detail: "Weiß nur, in welcher\nApp du schreibst."),
-                                  OnboardingTileOption(value: .cursor, title: "Text am Cursor",
-                                                       detail: "Liest die Zeilen rund\num deinen Cursor.", badge: "Empfohlen"),
-                                  OnboardingTileOption(value: .window, title: "Ganzes Fenster",
-                                                       detail: "Liest das ganze\naktive Fenster.")],
+                        options: [OnboardingTileOption(value: OnboardingModel.ContextLevel.app, title: L("Nur die App"),
+                                                       detail: L("Weiß nur, in welcher\nApp du schreibst.")),
+                                  OnboardingTileOption(value: .cursor, title: L("Text am Cursor"),
+                                                       detail: L("Liest die Zeilen rund\num deinen Cursor."), badge: L("Empfohlen")),
+                                  OnboardingTileOption(value: .window, title: L("Ganzes Fenster"),
+                                                       detail: L("Liest das ganze\naktive Fenster."))],
                         selection: model.context, tileHeight: 86,
                         select: { v in model.context = v; model.choicesChanged() }) { level in
                         OnboardingContextTile(level: level)
                     }
                 }
                 HubCard {
-                    HubRow("Im Prompt-Modus „diese Mail“ dazusagen",
-                           subtitle: "Dann liest VoiceBud für dieses eine Diktat das ganze Fenster\nund hängt den Text wörtlich unter den Prompt.") {
+                    HubRow(L("Im Prompt-Modus „diese Mail“ dazusagen"),
+                           subtitle: L("Dann liest VoiceBud für dieses eine Diktat das ganze Fenster\nund hängt den Text wörtlich unter den Prompt.")) {
                         EmptyView()
                     }
                 }
                 .padding(.top, OnboardingGap.m)
-                OnboardingFootnote("Passwortfelder liest VoiceBud nie.\nDer Kontext wird nicht gespeichert und verlässt deinen Mac nicht.", lines: 2)
+                OnboardingFootnote(L("Passwortfelder liest VoiceBud nie.\nDer Kontext wird nicht gespeichert und verlässt deinen Mac nicht."), lines: 2)
             }
             .frame(width: OnboardingLayout.column)
         }
@@ -2228,14 +2232,14 @@ struct OnboardingContextTile: View {
             VStack(alignment: .leading, spacing: 0) {
                 titleBar(dim: dim)
                 VStack(alignment: .leading, spacing: 0) {
-                    header("An:", "Lena", ink: ink, dim: dim)
+                    header(L("An:"), "Lena", ink: ink, dim: dim)
                     rule.frame(height: 0.5)
-                    header("Betreff:", "Folien für morgen", ink: ink, dim: dim)
+                    header(L("Betreff:"), L("Folien für morgen"), ink: ink, dim: dim)
                     rule.frame(height: 0.5)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("Hallo Lena, schickst du mir die Folien")
+                        Text(L("Hallo Lena, schickst du mir die Folien"))
                         HStack(spacing: 0.5) {
-                            Text("für morgen bis zehn?")
+                            Text(L("für morgen bis zehn?"))
                             Rectangle().fill(Color(hex: 0x8F6CF2)).frame(width: 0.8, height: 7)
                         }
                     }
@@ -2277,8 +2281,8 @@ struct OnboardingContextTile: View {
                 .padding(.vertical, 1)
                 .background { if level == .app { highlight } }
                 .padding(.horizontal, -3)
-            Text("Ablage").font(.system(size: 6.5))
-            Text("Bearbeiten").font(.system(size: 6.5))
+            Text(L("Ablage")).font(.system(size: 6.5))
+            Text(L("Bearbeiten")).font(.system(size: 6.5))
             Spacer(minLength: 0)
         }
         .foregroundStyle(ink)
@@ -2295,7 +2299,7 @@ struct OnboardingContextTile: View {
                 Circle().fill(Color(hex: 0x28C840)).frame(width: 4, height: 4)
                 Spacer(minLength: 0)
             }
-            Text("Folien für morgen").font(.system(size: 5.5, weight: .semibold)).foregroundStyle(dim)
+            Text(L("Folien für morgen")).font(.system(size: 5.5, weight: .semibold)).foregroundStyle(dim)
         }
         .padding(.horizontal, 5)
         .frame(height: 11)
@@ -2328,8 +2332,8 @@ struct OnboardingScreenText: View {
             HubSquircle(icon: HubIcon(symbol: "text.viewfinder", top: 0x8CCBFF, bottom: 0x3E92F0), size: 64)
                 .shadow(color: .black.opacity(t.dark ? 0.3 : 0.12), radius: 6, y: 3)
                 .padding(.bottom, OnboardingGap.m)
-            OnboardingHeader(title: "Texterkennung",
-                             subtitle: "Drück ⇧⌘2 und zieh einen Bereich auf. VoiceBud liest den Text darin,\nTabellen bleiben Tabellen, alles landet in der Zwischenablage.")
+            OnboardingHeader(title: L("Texterkennung"),
+                             subtitle: L("Drück ⇧⌘2 und zieh einen Bereich auf. VoiceBud liest den Text darin,\nTabellen bleiben Tabellen, alles landet in der Zwischenablage."))
                 .padding(.bottom, OnboardingGap.l)
             ZStack {
                 slot.id(stateKey).transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -2357,13 +2361,13 @@ struct OnboardingScreenText: View {
     @ViewBuilder private var slot: some View {
         HStack(spacing: OnboardingGap.s) {
             if model.screenTextGranted {
-                OnboardingStatus(mark: .ok, text: "Erteilt", large: true)
+                OnboardingStatus(mark: .ok, text: L("Erteilt"), large: true)
             } else if model.screenTextAsked {
-                OnboardingStatus(mark: .warn, text: "Wirkt nach dem Neustart am Ende", large: true)
-                Button("Systemeinstellungen öffnen") { model.requestScreenText() }
+                OnboardingStatus(mark: .warn, text: L("Wirkt nach dem Neustart am Ende"), large: true)
+                Button(L("Systemeinstellungen öffnen")) { model.requestScreenText() }
                     .buttonStyle(OnboardingButtonStyle(kind: .secondary, minWidth: 150))
             } else {
-                Button("Bildschirmaufnahme erlauben") { model.requestScreenText() }
+                Button(L("Bildschirmaufnahme erlauben")) { model.requestScreenText() }
                     .buttonStyle(OnboardingButtonStyle(kind: .primary, minWidth: 190))
                     .keyboardShortcut(.defaultAction)
             }
@@ -2375,11 +2379,11 @@ struct OnboardingScreenText: View {
         if model.screenTextAsked && !model.screenTextGranted {
             // the permission belongs to the UI, not the core: outside the app bundle macOS lists it
             // under the launcher's name, not tccName, so only the bundled name is spelled out
-            let where_ = model.tccName == "VoiceBud" ? "in den Systemeinstellungen „VoiceBud“" : "VoiceBud in den Systemeinstellungen"
-            return "Schalte \(where_) ein.\nDie Freigabe greift nach dem Neustart, den VoiceBud am Ende macht."
+            let where_ = model.tccName == "VoiceBud" ? L("in den Systemeinstellungen „VoiceBud“") : L("VoiceBud in den Systemeinstellungen")
+            return L("Schalte %@ ein.\nDie Freigabe greift nach dem Neustart, den VoiceBud am Ende macht.", where_)
         }
-        let privacy = "Das Bild bleibt auf deinem Mac und wird gleich gelöscht, der Text kommt in den Verlauf."
-        return model.screenTextGranted ? privacy : "Optional, geht auch später beim ersten ⇧⌘2.\n" + privacy
+        let privacy = L("Das Bild bleibt auf deinem Mac und wird gleich gelöscht, der Text kommt in den Verlauf.")
+        return model.screenTextGranted ? privacy : L("Optional, geht auch später beim ersten ⇧⌘2.") + "\n" + privacy
     }
 }
 
@@ -2393,32 +2397,32 @@ struct OnboardingFinish: View {
         OnboardingPage {
             appIcon
                 .padding(.bottom, OnboardingGap.s)
-            Text("Alles bereit")
+            Text(L("Alles bereit"))
                 .font(OnboardingType.title)
                 .foregroundStyle(t.fg)
                 .padding(.bottom, OnboardingGap.xs)
-            OnboardingKeyLine(before: "Drück", keys: HubFormat.hotkey(model.hotkeys["dictate"] ?? "ctrl+shift"),
-                              after: "in einer beliebigen App und sprich los.")
+            OnboardingKeyLine(before: L("Drück"), keys: HubFormat.hotkey(model.hotkeys["dictate"] ?? "ctrl+shift"),
+                              after: L("in einer beliebigen App und sprich los."))
                 .padding(.bottom, OnboardingGap.m)
             HubCard {
-                OnboardingRow("Beim Anmelden starten", subtitle: "VoiceBud wartet dann still in der Menüleiste.") {
+                OnboardingRow(L("Beim Anmelden starten"), subtitle: L("VoiceBud wartet dann still in der Menüleiste.")) {
                     HubSwitch(isOn: Binding(get: { model.launchAtLogin },
                                             set: { model.launchAtLogin = $0; model.choicesChanged() }))
                 }
                 HubSeparator()
-                OnboardingRow("VoiceBud lernt mit", subtitle: "Verbesserte Wörter merkt sich VoiceBud.") {
+                OnboardingRow(L("VoiceBud lernt mit"), subtitle: L("Verbesserte Wörter merkt sich VoiceBud.")) {
                     Image(systemName: "book.closed.fill").font(.system(size: 15)).foregroundStyle(Color(hex: 0xF59E0B))
                 }
                 HubSeparator()
-                OnboardingRow("Kürzel", subtitle: "Aus „meine Signatur“ wird der ganze Text.") {
+                OnboardingRow(L("Kürzel"), subtitle: L("Aus „meine Signatur“ wird der ganze Text.")) {
                     Image(systemName: "text.badge.plus").font(.system(size: 15)).foregroundStyle(Color(hex: 0x22C55E))
                 }
                 HubSeparator()
-                OnboardingRow("Texterkennung", subtitle: "⇧⌘2 drücken und einen Bereich aufziehen.") {
+                OnboardingRow(L("Texterkennung"), subtitle: L("⇧⌘2 drücken und einen Bereich aufziehen.")) {
                     Image(systemName: "text.viewfinder").font(.system(size: 15)).foregroundStyle(Color(hex: 0x3E92F0))
                 }
                 HubSeparator()
-                OnboardingRow("Verlauf und Einstellungen", subtitle: "Klick auf das Mikrofon in der Menüleiste.") {
+                OnboardingRow(L("Verlauf und Einstellungen"), subtitle: L("Klick auf das Mikrofon in der Menüleiste.")) {
                     OnboardingMenuBarTip()
                 }
             }
