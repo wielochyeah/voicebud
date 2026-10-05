@@ -172,6 +172,12 @@ extension Loc {
         "Texterkennung mit ⇧⌘2": "Text recognition with ⇧⌘2",
         "Bereich aufziehen, der Text landet in der Zwischenablage. ⌥ antippen für Formeln": "Drag over an area and the text goes to the clipboard. Tap ⌥ for formulas",
         "Erkannte Texte im Verlauf": "Recognized text in history",
+        "Formeln je App": "Formulas per App",
+        "Formel": "Equation",
+        "Zeichen": "Characters",
+        "Eine App aus dem Programme-Ordner auswählen und festlegen, was dort ankommt.": "Pick an app from the Applications folder and choose what it receives.",
+        "LaTeX für Apps, die Formeln selbst setzen, etwa Claude, ChatGPT oder Overleaf im Browser. Formel wird zur echten, bearbeitbaren Formel, getestet mit Word. Zeichen geht überall, etwa σ² oder √(x + 1).":
+            "LaTeX for apps that typeset formulas themselves, such as Claude, ChatGPT or Overleaf in a browser. Equation becomes a real, editable equation, tested with Word. Characters work everywhere, such as σ² or √(x + 1).",
         "Eigener Verlauf, getrennt von den Diktaten": "A separate history, apart from your dictations",
         "Verhalten": "Behavior",
         "Start- und Stopp-Ton": "Start and stop sound",

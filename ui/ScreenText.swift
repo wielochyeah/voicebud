@@ -72,8 +72,8 @@ final class ScreenText {
     private var pendingSince: Date?
     /// ⌥ pressed while choosing (or held when the region was taken): read it as formulas
     private var formula = false
-    private var optionSeen = false
-    private var optionSpoiled = false
+    private var taps = OptionTaps()
+    private var warmed = false
     private var optionTimer: Timer?
     /// unique per read (a respawned UI must not take an old answer for a new region)
     private var formulaID = ""
@@ -227,12 +227,14 @@ final class ScreenText {
     private func captured(_ path: URL) {
         capture = nil
         selecting = false
-        let asFormula = formula || (!dictationBusy && NSEvent.modifierFlags.intersection(Self.keys) == .option)
+        // exactly what the pill showed when the region was taken (05.10., Nils: switching back and
+        // forth must never mix the two up)
+        let asFormula = formula
         stopWatchingOption()
         IPC.island?.excludeFromCapture(false)
         guard FileManager.default.fileExists(atPath: path.path) else {
             busy = false                                // Esc: nothing chosen, the island closes quietly
-            state.ocrFormula = false
+            setFormula(false, animated: false)
             if state.mode == .ocr && state.phase == .recording { show(["type": "state", "phase": "idle", "mode": "ocr"]) }
             return
         }
@@ -290,13 +292,13 @@ final class ScreenText {
             if error == "unavailable" {
                 // the model is off or not downloaded: the usual recognition, so ⇧⌘2 still gives text
                 IPC.log("screen text: formula reader unavailable, plain recognition instead")
-                self.state.ocrFormula = false
+                self.setFormula(false, animated: false)
                 self.recognise(path, since: t0)
                 return
             }
             try? FileManager.default.removeItem(at: path)
             self.busy = false
-            self.state.ocrFormula = false
+            self.setFormula(false, animated: false)
             let dictation = self.dictationShowing
             guard let reply, error == nil,
                   let markdown = reply["markdown"] as? String, let plain = reply["plain"] as? String,
@@ -348,12 +350,11 @@ final class ScreenText {
 
     /// NSEvent's modifier state is read, not watched: no event monitor and no extra permission
     private func watchOption() {
-        formula = false
-        optionSeen = false
-        optionSpoiled = false
-        state.ocrFormula = false
+        taps = OptionTaps()
+        warmed = false
+        setFormula(false, animated: false)
         optionTimer?.invalidate()
-        let t = Timer(timeInterval: 0.04, repeats: true) { _ in
+        let t = Timer(timeInterval: 0.025, repeats: true) { _ in
             MainActor.assumeIsolated { ScreenText.shared?.pollOption() }
         }
         RunLoop.main.add(t, forMode: .common)
@@ -365,31 +366,56 @@ final class ScreenText {
         optionTimer = nil
     }
 
-    /// ⌥ pressed and let go on its own while choosing turns formulas on, and they stay on (05.10.,
-    /// Nils: a toggle ended "off" after several taps; Esc is the way out, as always). Not when it
-    /// came with another key, in any order: ⌃⌥ is the prompt hotkey, and a take may start while
-    /// the crosshair is out. Caps Lock and the like do not count.
+    /// every tap on ⌥ switches between text and formulas (05.10., Nils); the pill always shows
+    /// which one the region will be read as, and that is the one it is read as
     private func pollOption() {
         guard selecting else { return stopWatchingOption() }
-        guard !formula else { return }
-        let flags = NSEvent.modifierFlags.intersection(Self.keys)
-        if flags.isEmpty {
-            if optionSeen && !optionSpoiled && !dictationBusy {
-                formula = true
-                withAnimation(IslandMotion.swap) { state.ocrFormula = true }      // the capsule glides narrower
-                IPC.send(["type": "formula_warm"])          // the model loads while the user drags
-                IPC.log("screen text: formulas on")
-            }
-            optionSeen = false
-            optionSpoiled = false
-        } else if flags == .option {
-            optionSeen = true
-        } else if optionSeen || flags.contains(.option) {
-            optionSpoiled = true
+        guard taps.feed(NSEvent.modifierFlags.intersection(Self.keys)), !dictationBusy else { return }
+        setFormula(!formula, animated: true)
+    }
+
+    /// `formula` and the island's `state.ocrFormula` change together, never one without the other
+    private func setFormula(_ on: Bool, animated: Bool) {
+        formula = on
+        if animated {
+            withAnimation(IslandMotion.swap) { state.ocrFormula = on }   // the capsule glides
+        } else {
+            state.ocrFormula = on
         }
+        if on && !warmed {
+            warmed = true
+            IPC.send(["type": "formula_warm"])          // the model loads while the user drags
+        }
+        if animated { IPC.log("screen text: formulas \(on ? "on" : "off")") }
     }
 
     static let keys: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
+
+    /// A tap is ⌥ pressed and let go on its own. Not when another key joined it, in any order
+    /// (⌃⌥ is the prompt hotkey, and a take may start while the crosshair is out), and not the
+    /// ⇧⌘ of the hotkey itself; Caps Lock and fn are masked out before. One sample per poll.
+    struct OptionTaps {
+        private var seen = false
+        private var spoiled = false
+
+        /// true when a tap has just ended
+        mutating func feed(_ flags: NSEvent.ModifierFlags) -> Bool {
+            if flags.isEmpty {
+                let tap = seen && !spoiled
+                seen = false
+                spoiled = false
+                return tap
+            }
+            if flags == .option {
+                seen = true
+            } else if seen || flags.contains(.option) {
+                spoiled = true
+            } else {
+                spoiled = true        // another key alone: a ⌥ added later belongs to it
+            }
+            return false
+        }
+    }
 
     private func deliver(_ r: Result) {
         publish(r)
@@ -510,7 +536,7 @@ final class ScreenText {
     /// would be asked once, by Raycast's history right away, and then stay fixed: tried 04.10.)
     private func publish(_ r: Result) {
         last = r
-        write(Self.format(for: NSWorkspace.shared.frontmostApplication, r), transient: false)
+        write(format(for: NSWorkspace.shared.frontmostApplication, r), transient: false)
         if r.html != nil || r.formula != nil { watchSwitches() } else { stopWatching() }
     }
 
@@ -520,12 +546,28 @@ final class ScreenText {
         watchUntil = nil
     }
 
-    static func format(for app: NSRunningApplication?, _ r: Result) -> Format {
+    /// how formulas reach an app (the hub's "Formeln je App")
+    enum FormulaTarget: String, CaseIterable { case latex, equations, characters }
+
+    /// without an own choice: LaTeX where it is understood, equations in Word, else characters
+    static func formulaStandard(_ bundle: String) -> FormulaTarget {
+        latexApps.contains(bundle) ? .latex : equationApps.contains(bundle) ? .equations : .characters
+    }
+
+    static func formulaTarget(_ bundle: String, own: [String: String]) -> FormulaTarget {
+        own[bundle].flatMap(FormulaTarget.init(rawValue:)) ?? formulaStandard(bundle)
+    }
+
+    func format(for app: NSRunningApplication?, _ r: Result) -> Format {
         let id = app?.bundleIdentifier ?? ""
         if r.formula != nil {
-            return latexApps.contains(id) ? .latex : equationApps.contains(id) ? .equations : .characters
+            switch Self.formulaTarget(id, own: state.settings.formulaApps) {
+            case .latex: return .latex
+            case .equations: return .equations
+            case .characters: return .characters
+            }
         }
-        return plainOnly.contains(id) ? .plain : .rich
+        return Self.plainOnly.contains(id) ? .plain : .rich
     }
 
     private func write(_ format: Format, transient: Bool) {
@@ -558,8 +600,8 @@ final class ScreenText {
             stopWatching()
             return
         }
-        let format = Self.format(for: app, r)
-        if format != lastFormat { write(format, transient: true) }
+        let wanted = format(for: app, r)
+        if wanted != lastFormat { write(wanted, transient: true) }
     }
 
     /// the card's "Kopieren": the whole result again, table included

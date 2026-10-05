@@ -92,6 +92,7 @@ extension Loc {
         "Bereich wählen": "Select an area",
         "Formel wählen": "Select formula",
         "⌥ Formel": "⌥ Formula",
+        "⌥ Text": "⌥ Text",
         "Formel erkannt": "Formula recognized",
         "Formelerkennung hat nicht geantwortet": "Formula reader did not answer",
         "Text erkannt": "Text recognized",

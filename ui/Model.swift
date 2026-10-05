@@ -103,6 +103,8 @@ struct UISettings: Codable, Equatable {
     /// KONTEXT-PLAN.md: 0 Aus, 1 Nur App, 2 Text am Cursor, 3 Ganzes Fenster; per-app overrides
     var contextLevel: Int = 2
     var contextApps: [String: Int] = [:]
+    /// formulas per app (05.10., Nils): bundle id -> "latex" | "equations" | "characters" (own choice)
+    var formulaApps: [String: String] = [:]
     var contextElectron: Bool = true
     /// the first-run setup finished once (Python shows it again only while something is missing)
     var onboardingDone: Bool = false
@@ -119,7 +121,7 @@ struct UISettings: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case islandStyle, waveStyle, waveLive, alcove, confirmSeconds, sounds, hideInFullscreen, screenText, screenTextHistory,
-             keepModelsLoaded, liveText, confirmHoverExpand, contextLevel, contextApps, contextElectron,
+             keepModelsLoaded, liveText, confirmHoverExpand, contextLevel, contextApps, formulaApps, contextElectron,
              onboardingDone, muteWhileRecording, muteExceptions, menuBarStyle, uiLanguage, dictationLanguage
     }
 
@@ -146,6 +148,7 @@ struct UISettings: Codable, Equatable {
         confirmHoverExpand = (try? c.decodeIfPresent(Bool.self, forKey: .confirmHoverExpand)) ?? d.confirmHoverExpand
         contextLevel = min(3, max(0, (try? c.decodeIfPresent(Int.self, forKey: .contextLevel)) ?? d.contextLevel))
         contextApps = (try? c.decodeIfPresent([String: Int].self, forKey: .contextApps)) ?? d.contextApps
+        formulaApps = (try? c.decodeIfPresent([String: String].self, forKey: .formulaApps)) ?? d.formulaApps
         contextElectron = (try? c.decodeIfPresent(Bool.self, forKey: .contextElectron)) ?? d.contextElectron
         onboardingDone = (try? c.decodeIfPresent(Bool.self, forKey: .onboardingDone)) ?? d.onboardingDone
         muteWhileRecording = (try? c.decodeIfPresent(Bool.self, forKey: .muteWhileRecording)) ?? d.muteWhileRecording
@@ -173,6 +176,7 @@ struct UISettings: Codable, Equatable {
         try c.encode(confirmHoverExpand, forKey: .confirmHoverExpand)
         try c.encode(contextLevel, forKey: .contextLevel)
         try c.encode(contextApps, forKey: .contextApps)
+        try c.encode(formulaApps, forKey: .formulaApps)
         try c.encode(contextElectron, forKey: .contextElectron)
         try c.encode(onboardingDone, forKey: .onboardingDone)
         try c.encode(muteWhileRecording, forKey: .muteWhileRecording)

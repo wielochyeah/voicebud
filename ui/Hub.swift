@@ -1871,6 +1871,9 @@ struct HubGeneralPane: View {
                         HubSwitch(isOn: model.binding(\.screenTextHistory))
                     }
                 }
+                if model.state.settings.screenText {
+                    HubFormulaApps(model: model)
+                }
                 HubGroupLabel(L("Verhalten"), top: 20)
                 HubCard {
                     HubRow(L("Start- und Stopp-Ton"), subtitle: L("Leiser Ton beim Drücken und beim Loslassen")) {
@@ -2721,6 +2724,76 @@ enum HubContextCopy {
     static func appName(_ bundle: String) -> String {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) else { return bundle }
         return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+    }
+}
+
+/// Formulas per app (05.10., Nils): what a formula read with ⌥ becomes when pasted there.
+/// The usual apps that are installed, plus every app with an own choice; more via "App hinzufügen".
+struct HubFormulaApps: View {
+    let model: HubModel
+    @Environment(\.colorScheme) private var scheme
+
+    static let usual = ["com.microsoft.Word", "com.apple.Notes", "com.apple.mail", "com.anthropic.claudefordesktop",
+                        "com.openai.chat", "com.apple.Safari", "com.google.Chrome", "company.thebrowser.Browser",
+                        "notion.id", "md.obsidian", "com.apple.iWork.Pages", "com.microsoft.Powerpoint",
+                        "com.microsoft.onenote.mac", "com.tinyspeck.slackmacgap"]
+
+    private func rows(_ s: UISettings) -> [String] {
+        let usual = model.isPreview
+            ? ["com.microsoft.Word", "com.apple.Notes", "com.anthropic.claudefordesktop", "com.apple.Safari"]
+            : Self.usual.filter { HubContextCopy.installed($0) }
+        let own = s.formulaApps.keys.filter { k in !usual.contains { $0.lowercased() == k.lowercased() } }
+        return usual + own.sorted()
+    }
+
+    /// (computed: the titles follow a language switch)
+    static var options: [(value: ScreenText.FormulaTarget, title: String)] {
+        [(.latex, "LaTeX"), (.equations, L("Formel")), (.characters, L("Zeichen"))]
+    }
+
+    var body: some View {
+        let s = model.state.settings
+        let t = HubTheme(scheme)
+        HubGroupLabel(L("Formeln je App"), top: 20)
+        HubCard {
+            ForEach(rows(s), id: \.self) { bundle in
+                HubRow(HubContextCopy.appName(bundle),
+                       subtitle: s.formulaApps[bundle] == nil ? L("Standard") : L("Eigene Wahl"),
+                       icon: HubContextCopy.icon(bundle)) {
+                    HStack(spacing: 10) {
+                        if s.formulaApps[bundle] != nil {
+                            Button(L("Zurücksetzen")) { model.update { $0.formulaApps.removeValue(forKey: bundle) } }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 12.5))
+                                .foregroundStyle(t.fg2)
+                        }
+                        let current = ScreenText.formulaTarget(bundle, own: s.formulaApps)
+                        HStack(spacing: 4) {
+                            ForEach(Self.options, id: \.value) { option in
+                                HubChip(title: option.title, active: current == option.value) {
+                                    model.update { $0.formulaApps[bundle] = option.value.rawValue }
+                                }
+                            }
+                        }
+                    }
+                }
+                HubSeparator()
+            }
+            HubRow(L("Weitere App"), subtitle: L("Eine App aus dem Programme-Ordner auswählen und festlegen, was dort ankommt.")) {
+                HubChip(title: L("App hinzufügen …")) {
+                    if !model.isPreview {
+                        HubContextCopy.pickApp { bundle in
+                            model.update { s in
+                                if s.formulaApps[bundle] == nil {
+                                    s.formulaApps[bundle] = ScreenText.formulaStandard(bundle).rawValue
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        HubFootnote(L("LaTeX für Apps, die Formeln selbst setzen, etwa Claude, ChatGPT oder Overleaf im Browser. Formel wird zur echten, bearbeitbaren Formel, getestet mit Word. Zeichen geht überall, etwa σ² oder √(x + 1)."))
     }
 }
 

@@ -73,7 +73,7 @@ Drag over any part of the screen and the text lands on the clipboard, a replacem
 
 #### Formulas: tap `option` while choosing
 
-Press `shift+cmd+2`, tap `option` once, then drag. The island switches to "Select formula" and the region is read by the vision part of the same local model that cleans up your dictation: fractions, powers, roots, sums, integrals and Greek letters, together with the text around them.
+Press `shift+cmd+2`, tap `option`, then drag. The island switches to "Select formula" and the region is read by the vision part of the same local model that cleans up your dictation: fractions, powers, roots, sums, integrals and Greek letters, together with the text around them. Tap `option` again to switch back; the island always shows which of the two the region will be read as.
 
 ![Choosing a region with formulas](docs/screenshots/formula-select.jpg)
 
@@ -81,6 +81,8 @@ What lands on the clipboard depends on where you paste:
 - **Claude, ChatGPT, browsers, Notion, Obsidian, code editors:** Markdown with LaTeX (`$\sigma^2$`, `$$z_a = \frac{a - \mu}{\sigma}$$`), which they show as formulas or keep as source.
 - **Word:** real, editable equations.
 - **Notes, Mail and everything else:** readable characters, for example σ², √(x + 1), (a − μ)/σ.
+
+You can change this for each app, and add apps, in the hub under General, "Formulas per App".
 
 ![A formula recognised](docs/screenshots/formula-done.jpg)
 

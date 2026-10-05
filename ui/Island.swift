@@ -610,7 +610,7 @@ struct IslandSelectHint: View {
         HStack(spacing: 7) {
             Text(formula ? L("Formel wählen") : L("Bereich wählen"))
                 .foregroundStyle(Palette.accent(.ocr).opacity(0.9))
-            if option && !formula { IslandOptionHint() }
+            if option { IslandOptionHint(formula: formula) }
         }
         .font(.system(size: 11.5, weight: .medium))
         .fixedSize()
@@ -618,10 +618,11 @@ struct IslandSelectHint: View {
     }
 }
 
-/// the dim "⌥ Formel" beside the text recognition's hint
+/// the dim hint beside the text recognition's: where a tap on ⌥ switches to
 struct IslandOptionHint: View {
+    var formula = false
     var body: some View {
-        Text(L("⌥ Formel"))
+        Text(formula ? L("⌥ Text") : L("⌥ Formel"))
             .font(.system(size: 11.5, weight: .medium))
             .foregroundStyle(.white.opacity(0.42))
             .fixedSize()
@@ -1654,8 +1655,8 @@ struct NotchIslandView: View {
         let t = AnyTransition.islandGlyph(swap: model.contentSwap, toward: .trailing, reduce: reduce)
         return HStack(spacing: 7) {
             if shown && active { IslandMicBadge(mode: model.mode, formula: state.ocrFormula).transition(t) }
-            if shown && phase == .recording && model.mode == .ocr && !state.ocrFormula {
-                IslandOptionHint().transition(t)                // left of the notch: the right ear keeps its room
+            if shown && phase == .recording && model.mode == .ocr {
+                IslandOptionHint(formula: state.ocrFormula).transition(t)   // left of the notch: the right ear keeps its room
             }
             if shown && phase == .recording && model.mode != .ocr { IslandRecDot().transition(t) }
             if shown && phase == .recording && live && model.mode != .ocr {
