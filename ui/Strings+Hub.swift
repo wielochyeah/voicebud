@@ -166,7 +166,8 @@ extension Loc {
         "Oberfläche": "Interface",
         "Sprache von Hub, Insel, Menü und Einrichtung": "Language of the hub, island, menu and setup",
         "Wie macOS": "System",
-        "Automatisch erkennt Deutsch oder Englisch je Aufnahme": "Automatic picks German or English for each take",
+        "Automatisch erkennt Deutsch oder Englisch je Aufnahme. Fest gewählt geht es schneller, auf älteren Macs bis zu zwei Sekunden pro Diktat.":
+            "Automatic detects German or English for each take. A fixed language is faster, up to two seconds per dictation on older Macs.",
         "Deutsch": "German",
         "Englisch": "English",
         "Texterkennung mit ⇧⌘2": "Text recognition with ⇧⌘2",
@@ -205,7 +206,120 @@ extension Loc {
             "Off saves RAM: Whisper unloads after 10 idle minutes, the cleanup model after 5. Both reload with your next dictation.",
         "Kurzbefehle": "Keyboard Shortcuts",
         "Text markieren, halten, sagen was passieren soll": "Select text, hold, say what should happen",
-        "Diktat und Prompt: einmal drücken zum Starten, nochmal zum Beenden. Befehl: halten, sprechen, loslassen. Die Tasten legst du in config.yaml fest.":
-            "Dictation and Prompt: press once to start, again to stop. Command: hold, speak, let go. Set the keys in config.yaml.",
+        "Ist aus, einschalten unter Texterkennung": "Off, turn it on under Text Recognition",
+        "Tasten drücken …": "Press keys …",
+        "Abbrechen": "Cancel",
+        "Ändern": "Change",
+        "Erst die laufende Aufnahme beenden": "Finish the current recording first",
+        "Leertaste": "Space",
+        "Diktat und Prompt: einmal drücken zum Starten, nochmal zum Beenden. Befehl: halten, sprechen, loslassen. Ein Kurzbefehl besteht aus Sondertasten allein (zwei oder mehr, oder eine rechts allein, bei Befehl zwei oder mehr) oder aus Sondertasten mit einer Taste, etwa ⌥⇧⌘D. Was macOS oder fast jede App schon nutzt, lehnt VoiceBud ab und sagt, wofür es steht.":
+            "Dictation and Prompt: press once to start, again to stop. Command: hold, speak, let go. A shortcut is modifier keys alone (two or more, or one right-hand key alone, two or more for Command) or modifiers with a key, like ⌥⇧⌘D. VoiceBud refuses what macOS or almost every app already uses and says what it does.",
+        "Die 🌐-Taste kann VoiceBud noch nicht als Kurzbefehl nutzen. Nimm zwei Sondertasten.":
+            "VoiceBud can’t use the 🌐 key as a shortcut yet. Use two modifiers.",
+        "Eine Taste allein links steckt in fast jedem Kurzbefehl. Nimm zwei Sondertasten.":
+            "A single left-hand key is part of almost every shortcut. Use two modifiers.",
+        "⌥ schaltet in der Texterkennung auf Formeln um. Nimm eine andere Taste.":
+            "⌥ switches text recognition to formulas. Use another key.",
+        "Befehl startet schon beim Drücken. Mit %@ allein würde jeder Kurzbefehl mit dieser Taste eine Aufnahme starten. Nimm zwei Sondertasten.":
+            "Command starts the moment it’s pressed. With %@ alone, every shortcut using that key would start a recording. Use two modifiers.",
+        "Der Kurzbefehl für %@ (%@) beginnt mit %@, VoiceBud würde dabei mitstarten. Nimm eine andere Kombination.":
+            "The shortcut for %@ (%@) starts with %@, so VoiceBud would start as well. Pick another combination.",
+        "Drück dein Tastenkürzel, sag einen Satz und drück es noch einmal.":
+            "Press your shortcut, say a sentence and press it again.",
+        "Hinweis: %@ %@, sobald du diesen Kurzbefehl in macOS einschaltest. Bei dir ist er aus. Schaltest du ihn später ein, gewinnt macOS.":
+            "Note: %@ %@ once you turn that shortcut on in macOS. It’s off on your Mac. If you turn it on later, macOS wins.",
+        "Hinweis: %@ %@. Das geht dann nicht mehr.":
+            "Note: %@ %@. That then no longer works.",
+        "Hinweis: %@ tippt auf deiner Tastatur ein Leerzeichen, das geht dann in keiner App mehr.":
+            "Note: %@ types a space on your keyboard, which then no longer works in any app.",
+        "Hinweis: Auf Apple-Tastaturen drückst du für %@ fn mit, solange die F-Tasten nicht als Standard-Funktionstasten eingestellt sind (Systemeinstellungen > Tastatur > Tastaturkurzbefehle > Funktionstasten).":
+            "Note: on Apple keyboards hold fn for %@ unless the F keys are set to work as standard function keys (System Settings > Keyboard > Keyboard Shortcuts > Function Keys).",
+        "Hinweis: Ein Mausklick mit gedrückter Taste %@ schaltet ebenfalls um.":
+            "Note: a mouse click with %@ held toggles as well.",
+        "Hinweis: Ein Mausklick mit gedrückter Taste %@ schaltet ebenfalls um. Und ist bei der Diktierfunktion von macOS das zweimalige Drücken dieser Taste eingestellt, startet sie mit (Systemeinstellungen > Tastatur > Diktierfunktion).":
+            "Note: a mouse click with %@ held toggles as well. And if macOS Dictation is set to a double press of that key, it starts too (System Settings > Keyboard > Dictation).",
+        "Ziffernblock %@":
+            "Keypad %@",
+        "Zurück zum Standard-Kurzbefehl":
+            "Back to the default shortcut",
+        "%@ %@ (im Terminal, auch in Claude Code und VS Code). Als Kurzbefehl ginge das dort verloren. Nimm eine andere Kombination.":
+            "%@ %@ (in the Terminal, Claude Code and VS Code too). As a shortcut that would be lost there. Pick another combination.",
+        "%@ %@, das gehört immer macOS. Nimm eine andere Kombination.":
+            "%@ %@, that always belongs to macOS. Pick another combination.",
+        "%@ %@, das ist ein Kurzbefehl von macOS (Systemeinstellungen > Tastatur > Tastaturkurzbefehle). Nimm eine andere Kombination.":
+            "%@ %@, that is a macOS shortcut (System Settings > Keyboard > Keyboard Shortcuts). Pick another combination.",
+        "%@ %@, und das in fast jeder App. Als Kurzbefehl von VoiceBud ginge das überall verloren. Nimm eine andere Kombination.":
+            "%@ %@ in almost every app. As a VoiceBud shortcut that would be lost everywhere. Pick another combination.",
+        "%@ %@, und das in fast jeder App. Als Kurzbefehl von VoiceBud ginge das überall verloren. Nimm ⌃, ⌥ oder ⇧ dazu.":
+            "%@ %@ in almost every app. As a VoiceBud shortcut that would be lost everywhere. Add ⌃, ⌥ or ⇧.",
+        "%@ %@, und das in jedem Textfeld von macOS. Als Kurzbefehl ginge das überall verloren. Nimm eine andere Kombination.":
+            "%@ %@ in every macOS text field. As a shortcut that would be lost everywhere. Pick another combination.",
+        "%@ belegt macOS selbst (Systemeinstellungen > Tastatur > Tastaturkurzbefehle). Nimm eine andere Kombination.":
+            "macOS uses %@ itself (System Settings > Keyboard > Keyboard Shortcuts). Pick another combination.",
+        "%@ braucht jede App zum Schreiben und Bewegen im Text. Nimm einen Buchstaben, eine Zahl oder eine F-Taste.":
+            "Every app needs %@ for typing and moving around in text. Use a letter, a number or an F key.",
+        "%@ geht als Kurzbefehl nicht. Nimm ⌃, ⌥ oder ⌘ dazu.":
+            "%@ doesn’t work as a shortcut. Add ⌃, ⌥ or ⌘.",
+        "%@ setzt auf deiner Tastatur den Akzent „%@“ (für Buchstaben wie ñ oder é). Als Kurzbefehl ginge der überall verloren. Nimm ⌃ oder ⌘ dazu.":
+            "%@ adds the accent “%@” on your keyboard (for letters like ñ or é). As a shortcut it would be lost everywhere. Add ⌃ or ⌘.",
+        "%@ tippt auf deiner Tastatur „%@“. Als Kurzbefehl könntest du „%@“ in keiner App mehr schreiben. Nimm ⌃ oder ⌘ dazu.":
+            "%@ types “%@” on your keyboard. As a shortcut you couldn’t type “%@” in any app. Add ⌃ or ⌘.",
+        "%@ tippt „%@“. Als Kurzbefehl könntest du das in keiner App mehr schreiben. Nimm ⌃, ⌥ oder ⌘ dazu.":
+            "%@ types “%@”. As a shortcut you couldn’t type it in any app. Add ⌃, ⌥ or ⌘.",
+        "%@ und %@ sind zwei normale Tasten auf einmal. Das kann macOS nicht als Kurzbefehl melden. Möglich ist eine Taste mit bis zu vier Sondertasten (⌃ ⌥ ⇧ ⌘), oder nur Sondertasten.":
+            "%@ and %@ are two regular keys at once. macOS can’t report that as a shortcut. Use one key with up to four modifiers (⌃ ⌥ ⇧ ⌘), or modifiers alone.",
+        "%@ übernehmen":
+            "Use %@",
+        "Das ist schon der Kurzbefehl für %@":
+            "That’s already the shortcut for %@",
+        "Die 🌐-Taste kann VoiceBud noch nicht als Kurzbefehl nutzen. Nimm ⌘ rechts oder zwei Sondertasten.":
+            "VoiceBud can’t use the 🌐 key as a shortcut yet. Use the right ⌘ or two modifiers.",
+        "Die 🌐-Taste kann macOS zusammen mit einer anderen Taste nicht an VoiceBud melden. Solche Kombinationen nutzt macOS selbst, etwa 🌐F für Vollbild oder 🌐Q für die Schnellnotiz. Lass 🌐 weg.":
+            "macOS can’t report the 🌐 key together with another key to VoiceBud. macOS uses such combinations itself, like 🌐F for full screen or 🌐Q for Quick Note. Leave 🌐 out.",
+        "Drück die neue Kombination: eine Taste mit bis zu vier Sondertasten (⌃ ⌥ ⇧ ⌘), oder nur Sondertasten. Esc bricht ab.":
+            "Press the new combination: one key with up to four modifiers (⌃ ⌥ ⇧ ⌘), or modifiers alone. Esc cancels.",
+        "Eine Taste allein links steckt in fast jedem Kurzbefehl. Nimm zwei Sondertasten oder eine rechts.":
+            "A single left-hand key is part of almost every shortcut. Use two modifiers or a right-hand one.",
+        "Eine andere App hält %@ schon fest, etwa Raycast, Alfred oder ein Fenster-Tool. VoiceBud bekäme die Tasten nicht. Gib die Kombination dort frei oder nimm eine andere.":
+            "Another app already holds %@, like Raycast, Alfred or a window tool. VoiceBud wouldn’t get the keys. Free the combination there or pick another.",
+        "Hinweis: %@ %@ (im Terminal, auch in iTerm und VS Code). Dort geht das dann nicht mehr.":
+            "Note: %@ %@ (in the Terminal, iTerm and VS Code too). That then no longer works there.",
+        "Hinweis: %@ %@, das geht dann nicht mehr.":
+            "Note: %@ %@, which then no longer works.",
+        "Hinweis: %@ nutzen manche Apps selbst, etwa Fenster-Tools mit ⌃⌥ und Pfeiltasten oder Chat-Apps zum Abschicken. Dort geht es dann nicht mehr.":
+            "Note: some apps use %@ themselves, like window tools with ⌃⌥ and arrows or chat apps for sending. It then no longer works there.",
+        "Hinweis: %@ tippt auf deiner Tastatur „%@“, das geht dann in keiner App mehr. In Passwortfeldern setzt macOS solche Kurzbefehle aus, dort kommt dann „%@“ an.":
+            "Note: %@ types “%@” on your keyboard, which then no longer works in any app. In password fields macOS suspends such shortcuts, and “%@” is typed there.",
+        "Hinweis: VoiceOver nutzt ⌃⌥ als VO-Taste. Solange VoiceOver an ist, kann %@ dort einen VoiceOver-Befehl ersetzen.":
+            "Note: VoiceOver uses ⌃⌥ as its VO key. While VoiceOver is on, %@ can replace a VoiceOver command.",
+        "Hinweis: ⇧⌘ und ⌥⌘ mit einem Buchstaben nutzen viele Apps für eigene Menübefehle. Ob eine App %@ belegt, kann VoiceBud nicht nachsehen. Falls ja, geht es dort nicht mehr.":
+            "Note: many apps use ⇧⌘ and ⌥⌘ with a letter for their own menu commands. VoiceBud can’t check whether an app uses %@. If one does, it then no longer works there.",
+        "Lautstärke-, Medien- und Helligkeitstasten behält macOS für sich. Nimm eine F-Taste oder eine Kombination mit ⌃ oder ⌘.":
+            "macOS keeps the volume, media and brightness keys for itself. Use an F key or a combination with ⌃ or ⌘.",
+        "Loslassen speichert nur die Sondertasten, eine weitere Taste macht eine Kombination.":
+            "Letting go saves the modifiers alone, another key makes a combination.",
+        "Rückgängig":
+            "Undo",
+        "VoiceBud ist in den Hintergrund gerückt. Hat macOS die Kombination selbst genutzt (etwa ⌘⇥ oder ⌘Leertaste), ist sie schon belegt. Klick auf Ändern für einen neuen Versuch.":
+            "VoiceBud moved to the background. If macOS used the combination itself (like ⌘⇥ or ⌘Space), it’s already taken. Click Change to try again.",
+        "macOS %@ lässt Kurzbefehle nur mit ⌥ oder ⌥⇧ nicht zu, ab macOS 15.2 geht es wieder. Nimm ⌃ oder ⌘ dazu oder aktualisiere macOS.":
+            "macOS %@ doesn’t allow shortcuts with only ⌥ or ⌥⇧, macOS 15.2 and later do again. Add ⌃ or ⌘, or update macOS.",
+        "macOS nimmt %@ nicht als Kurzbefehl an (Fehler %d). Nimm eine andere Kombination.":
+            "macOS doesn’t accept %@ as a shortcut (error %d). Pick another combination.",
+        "macOS oder eine andere App hat %@ abgefangen, bevor VoiceBud die Tasten sehen konnte (etwa ⌘Leertaste für Spotlight oder ⇧⌘4 für Bildschirmfotos). Diese Kombination ist schon belegt, nimm eine andere.":
+            "macOS or another app caught %@ before VoiceBud could see the keys (like ⌘Space for Spotlight or ⇧⌘4 for screenshots). That combination is taken, pick another.",
+        "⌘ mit nur einer Taste gehört den Menübefehlen der Apps. Nimm ⌃, ⌥ oder ⇧ dazu.":
+            "⌘ with a single key belongs to the apps’ menu commands. Add ⌃, ⌥ or ⇧.",
+        "%@ startet schon mit %@ allein und würde bei dieser Kombination mitstarten. Nimm andere Sondertasten.":
+            "%@ already starts with %@ alone and would also start with this combination. Use other modifier keys.",
+        "Andere Kombination drücken, Esc bricht ab": "Press another combination, Esc cancels",
+        "Befehl (%@) steckt darin und würde jedes Mal kurz mitstarten, nimm eine andere Kombination":
+            "Command (%@) is part of it and would briefly start every time, pick another combination",
+        "Das steckt in %@ (%@), Befehl würde dort jedes Mal kurz mitstarten. Nimm eine andere Kombination.":
+            "That is part of %@ (%@), Command would briefly start there every time. Pick another combination.",
+        "Die Leertaste braucht man zum Schreiben. Nimm ⌃ oder ⌘ dazu.": "The space bar is needed for typing. Add ⌃ or ⌘.",
+        "Esc bricht die Aufnahme ab": "Esc cancels the recording",
+        "Mit %@ beginnen Kurzbefehle von macOS (etwa %@), dabei würde VoiceBud mitstarten. Nimm eine andere Kombination.":
+            "macOS shortcuts start with %@ (like %@), so VoiceBud would start as well. Pick another combination.",
     ]
 }

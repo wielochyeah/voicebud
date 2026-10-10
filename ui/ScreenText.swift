@@ -32,7 +32,6 @@ final class ScreenText {
     /// not close the island meanwhile, see IPC.applyState)
     var isBusy: Bool { busy }
 
-    private var hotKey: EventHotKeyRef?
     private var helper: Process?
     private var helperIn: FileHandle?
     private var waiting: ((([String: Any]?) -> Void))?
@@ -80,44 +79,9 @@ final class ScreenText {
     private var formulaWaiting: (([String: Any]?) -> Void)?
     private var formulaTimeout: DispatchWorkItem?
 
+    /// the shortcut itself is registered by HotkeyCenter (10.10.: it can be a chord the core watches)
     func start() {
-        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, _ -> OSStatus in
-            DispatchQueue.main.async { MainActor.assumeIsolated { ScreenText.shared?.pressed() } }
-            return noErr
-        }, 1, &spec, nil, nil)
-        if state.settings.screenText { register() }
         removeLeftovers()
-    }
-
-    /// switched off in the Hub: the shortcut goes back to other apps; on: VoiceBud takes it again
-    func settingsDidChange() {
-        if state.settings.screenText && hotKey == nil {
-            register()
-        } else if !state.settings.screenText, let ref = hotKey {
-            UnregisterEventHotKey(ref)
-            hotKey = nil
-            IPC.log("screen text: off, ⇧⌘2 released")
-        }
-    }
-
-    /// exclusive: another app on ⇧⌘2 (TextShot uses it too) stays silent while VoiceBud holds it,
-    /// instead of both taking a picture. A plain hot key never fails, so only the exclusive call
-    /// can tell that someone else got there first.
-    private func register() {
-        let id = EventHotKeyID(signature: OSType(0x5642_5554), id: 2)   // "VBUT"
-        var status = RegisterEventHotKey(UInt32(kVK_ANSI_2), UInt32(cmdKey | shiftKey), id,
-                                         GetApplicationEventTarget(), OptionBits(kEventHotKeyExclusive), &hotKey)
-        if status == noErr {
-            IPC.log("screen text: ⇧⌘2 ready")
-            return
-        }
-        status = RegisterEventHotKey(UInt32(kVK_ANSI_2), UInt32(cmdKey | shiftKey), id,
-                                     GetApplicationEventTarget(), 0, &hotKey)
-        let other = NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "io.fadel.TextShot" }
-            ? "TextShot" : "another app"
-        // only an exclusive holder makes the exclusive call fail, and it then keeps ⇧⌘2 to itself
-        IPC.log("screen text: ⇧⌘2 is held exclusively by \(other), VoiceBud gets no presses (status \(status))")
     }
 
     /// pictures of a UI that died between the capture and the answer
@@ -133,7 +97,8 @@ final class ScreenText {
 
     func pressed() {
         if busy {
-            // a second ⇧⌘2 while the crosshair is out puts it away, like Esc
+            // a second ⇧⌘2 while the crosshair is out puts it away, like Esc (and ⌥ stops counting)
+            selecting = false
             if let c = capture, c.isRunning { c.interrupt() }
             return
         }
@@ -350,7 +315,10 @@ final class ScreenText {
 
     /// NSEvent's modifier state is read, not watched: no event monitor and no extra permission
     private func watchOption() {
-        taps = OptionTaps()
+        // an own shortcut with ⌥ in it (10.10.): letting go of it is no tap
+        // (or a chord with ⌥ the core watches: still held when this starts)
+        let ownOption = (HotkeyCenter.shared.combo("ocr")?.mods ?? 0) & UInt32(optionKey) != 0
+        taps = OptionTaps(shortcutHasOption: ownOption || NSEvent.modifierFlags.contains(.option))
         warmed = false
         setFormula(false, animated: false)
         optionTimer?.invalidate()
@@ -400,6 +368,8 @@ final class ScreenText {
     struct OptionTaps {
         private var seen = false
         private var spoiled = false
+
+        init(shortcutHasOption: Bool = false) { spoiled = shortcutHasOption }
 
         /// true when a tap has just ended
         mutating func feed(_ flags: NSEvent.ModifierFlags) -> Bool {

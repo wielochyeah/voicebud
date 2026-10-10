@@ -40,7 +40,7 @@ from audio import Recorder
 from cleanup import Cleaner
 from dictionary import Dictionary
 from history import History
-from hotkey import PushToTalk
+from hotkey import KeyHotkey, PushToTalk
 from stream import SttWorker, Take
 from transcribe import Transcriber, footprint_mb
 from ui_bridge import UIBridge
@@ -195,6 +195,81 @@ def preview_of(text, limit=PREVIEW_CHARS, keep_lines=False):
     return cut.rstrip(",;: \n") + " …"
 
 
+def hotkey_specs(cfg, prefs):
+    """{mode: (shortcut, toggle|hold)}: config.yaml's hotkeys, each replaced by the hub's choice when that
+    is a valid shortcut and not taken by another mode (a broken or doubled choice keeps the default).
+    A shortcut is a chord string ("ctrl+alt", watched here) or a key dict ({"key", "mods", "label"},
+    registered by the UI). "ocr" (the text recognition) is only here when its choice is a chord: the
+    UI registers its key itself."""
+    from hotkey import valid, valid_key
+    specs = {"dictate": (cfg["hotkey"]["key"], cfg["hotkey"].get("mode", "hold"))}
+    for mode_name, section in (("prompt", "prompt_hotkey"), ("command", "command_hotkey")):
+        if cfg.get(section):
+            specs[mode_name] = (cfg[section]["key"], cfg[section].get("mode", "hold"))
+    own = prefs.get("shortcuts") if isinstance(prefs.get("shortcuts"), dict) else {}
+
+    def same(a, b):
+        if isinstance(a, str) and isinstance(b, str):
+            return sorted(a.lower().split("+")) == sorted(b.lower().split("+"))
+        if isinstance(a, dict) and isinstance(b, dict):
+            return (a.get("key"), a.get("mods")) == (b.get("key"), b.get("mods"))
+        return False
+
+    wanted = list(specs) + (["ocr"] if prefs.get("screenText", True) is not False else [])
+    # pass 1: every valid own choice (an "ocr" key is the UI's own)
+    chosen = {}
+    for mode_name in wanted:
+        choice = own.get(mode_name)
+        if isinstance(choice, str):
+            choice = "+".join(n.strip() for n in choice.lower().split("+"))
+            if not valid(choice):
+                continue
+        elif not valid_key(choice) or mode_name == "ocr":
+            continue
+        else:
+            choice = dict(choice, key=int(choice["key"]), mods=int(choice["mods"]))
+        chosen[mode_name] = choice
+    # pass 2: against the final set, not the defaults still waiting to be replaced (moving prompt
+    # away and giving its keys to dictation, or swapping the two, must work); on a real clash the
+    # later choice gives way, the defaults never clash with each other
+    while True:
+        final = {m: chosen.get(m, specs[m][0] if m in specs else None) for m in wanted}
+        loser = next((m for m in reversed(list(chosen))
+                      if any(same(chosen[m], k) for o, k in final.items() if o != m and k is not None)), None)
+        if loser is None:
+            break
+        del chosen[loser]
+    for mode_name, choice in chosen.items():
+        specs[mode_name] = (choice, specs[mode_name][1] if mode_name in specs else "toggle")
+    return specs
+
+
+OCR_STANDARD = {"key": 19, "mods": 256 | 512, "label": "⇧⌘2"}
+
+
+def ui_ocr_key(prefs, specs):
+    """The key the UI registers for the text recognition (it never reaches the core), or None: off,
+    or a chord the core watches itself. A chord inside it must be strict too."""
+    from hotkey import valid_key
+    if prefs.get("screenText", True) is False or "ocr" in specs:
+        return None
+    own = prefs.get("shortcuts") if isinstance(prefs.get("shortcuts"), dict) else {}
+    choice = own.get("ocr")
+    if isinstance(choice, str):
+        return None             # a chord: the UI registers no key (one the core dropped starts nothing)
+    return dict(choice, key=int(choice["key"]), mods=int(choice["mods"])) if valid_key(choice) else OCR_STANDARD
+
+
+def hotkey_mod_names():
+    from hotkey import MOD_MASKS
+    return MOD_MASKS
+
+
+def hotkey_label(spec):
+    """How a shortcut is told to the UI: the chord itself, a key as "label:⌃W"."""
+    return spec if isinstance(spec, str) else "label:" + spec["label"]
+
+
 class VoiceBud:
     def __init__(self, cfg, recorder=None, open_mic=True):
         self.cfg = cfg
@@ -211,17 +286,15 @@ class VoiceBud:
                                         channels=cfg["audio"]["channels"])
         self.rec.on_chunk = self._on_chunk
         self.open_mic = open_mic  # False: tests push audio via rec.feed(), no microphone
-        hotkeys = {"dictate": cfg["hotkey"]["key"]}
-        if cfg.get("prompt_hotkey"):
-            hotkeys["prompt"] = cfg["prompt_hotkey"]["key"]
-        if cfg.get("command_hotkey"):
-            hotkeys["command"] = cfg["command_hotkey"]["key"]
+        hotkeys = {m: hotkey_label(key) for m, (key, _mode) in hotkey_specs(cfg, self.settings).items()}
+        standard = {m: hotkey_label(key) for m, (key, _mode) in hotkey_specs(cfg, {}).items()}
         data = str(settings.data_dir()).replace(os.path.expanduser("~"), "~", 1)
-        self.ui = UIBridge({"version": 1, "hotkeys": hotkeys, "dataDir": data},
+        self.ui = UIBridge({"version": 1, "hotkeys": hotkeys, "hotkey_standard": standard, "dataDir": data},
                            on_quit=self.request_quit, on_settings_changed=self.reload_settings,
                            on_probe=self.run_probe, on_onboarding=self._on_onboarding,
                            on_lost=self._ui_lost, on_slow_hint=self._slow_hint_shown,
-                           on_ocr_result=self._ocr_result, on_formula=self._formula)
+                           on_ocr_result=self._ocr_result, on_formula=self._formula,
+                           on_hotkeys_pause=self._hotkeys_pause, on_hotkey=self._hotkey)
         self.onboarding = onboarding.Onboarding(self)
         self.snippets = snippets.load()
         self.learner = learn.Learner(self._learned, allowed=self._may_learn, own_pids=self._own_pids)
@@ -243,6 +316,8 @@ class VoiceBud:
         self._recording = threading.Event()
         self._closing = False
         self.ptts = {}         # mode -> PushToTalk (set by main): hold-mode release check
+        self._hk_paused = False  # the hub records a new shortcut (see _hotkeys_pause)
+        self._hk_pause_gen = 0
         self._rec_started = 0.0
         self._busy = 0         # takes stopped but not finished: notices wait while one runs
         self._busy_lock = threading.Lock()
@@ -276,6 +351,7 @@ class VoiceBud:
                   f"{self.worker.idle_unload_s / 60:g} min idle (keepModelsLoaded=false).")
         threading.Thread(target=self._level_loop, name="levels", daemon=True).start()
         self._system_events = _SystemEvents.alloc().initWithVoiceBud_(self)
+        print(machine_line(), flush=True)
 
     def request_quit(self):
         from PyObjCTools import AppHelper
@@ -301,9 +377,99 @@ class VoiceBud:
             from PyObjCTools import AppHelper
             AppHelper.stopEventLoop()
 
+    def _hotkeys_pause(self, on):
+        """The hub records a new shortcut: the keys pressed for it must not start a take, so the
+        monitors are off until it is done (a lost "off" ends the pause after 30 s)."""
+        from PyObjCTools import AppHelper
+
+        def apply():
+            self._hk_paused = on
+            self._hk_pause_gen += 1
+            if on:
+                for ptt in self.ptts.values():
+                    ptt.stop()
+                self.ptts.clear()
+                gen = self._hk_pause_gen
+                AppHelper.callLater(30.0, lambda: apply_off(gen))
+            else:
+                self.install_hotkeys()
+
+        def apply_off(gen):
+            if self._hk_paused and self._hk_pause_gen == gen:
+                self._hotkeys_pause(False)
+
+        AppHelper.callAfter(apply)
+
+    def _hotkey(self, mode, down):
+        """The UI reports a key shortcut it holds for us (KeyHotkey): pressed or released."""
+        from PyObjCTools import AppHelper
+
+        def apply():
+            ptt = self.ptts.get(mode)
+            if isinstance(ptt, KeyHotkey) and not self._hk_paused:
+                ptt.event(down)
+        AppHelper.callAfter(apply)
+
+    def install_hotkeys(self):
+        """The hotkeys from config.yaml with the hub's own choices over them (settings
+        "shortcuts", 10.10.): installed at the start and again whenever a choice changes, without a
+        restart. Main thread. A take still recording finishes first (its keys must keep working;
+        after a pause there are none, and the new ones stop it like the old would have)."""
+        if self._hk_paused:
+            return                                          # the pause's end installs them
+        if self.owner is not None and self.ptts:
+            from PyObjCTools import AppHelper
+            AppHelper.callLater(1.0, self.install_hotkeys)
+            return
+        for ptt in self.ptts.values():
+            ptt.stop()
+        self.ptts.clear()
+        specs = hotkey_specs(self.cfg, self.settings)
+        blurbs = {"dictate": "to dictate", "prompt": "to turn speech into a structured AI prompt",
+                  "command": "over selected text to edit it by voice", "ocr": "for text recognition"}
+        for mode_name, (key, mode) in specs.items():
+            if mode_name == "ocr":
+                # a chord for the text recognition: each press goes to the UI, which opens the
+                # crosshair (or puts it away again)
+                press = (lambda: self.ui.send({"type": "screen_text"}))
+                self.ptts[mode_name] = PushToTalk(key, press, press, mode="toggle", active=lambda: False).start()
+            else:
+                kind = PushToTalk if isinstance(key, str) else KeyHotkey
+                self.ptts[mode_name] = kind(
+                    key, (lambda m=mode_name: self.start_rec(m)), (lambda m=mode_name: self.stop_rec(m)),
+                    active=(lambda m=mode_name: self.owner == m), on_cancel=(lambda m=mode_name: self.cancel_rec(m)),
+                    mode=mode, on_chord=self.ui.prepare).start()
+            print(f"{'Press' if mode == 'toggle' else 'Hold'} [{hotkey_label(key)}] {blurbs[mode_name]} ({mode} mode).")
+        # a chord inside another shortcut gets strict (see PushToTalk.strict)
+        def families(spec):
+            if isinstance(spec, str):
+                return {n.split("_")[0] for n in spec.split("+") if n in hotkey_mod_names()}
+            return {f for bit, f in ((4096, "ctrl"), (2048, "alt"), (512, "shift"), (256, "cmd")) if spec["mods"] & bit}
+        others = {m: k for m, (k, _) in specs.items()}
+        ocr_key = ui_ocr_key(self.settings, specs)
+        if ocr_key is not None:
+            others["ocr"] = ocr_key                       # the UI's own key (⇧⌘2 or the hub's choice)
+        for mode_name, (key, _mode) in specs.items():
+            ptt = self.ptts.get(mode_name)
+            if isinstance(ptt, PushToTalk):
+                mine = families(key)
+                ptt.strict = any(mine < families(k) for m, k in others.items() if m != mode_name)
+        keys = {m: hotkey_label(key) for m, (key, _mode) in specs.items()}
+        standard = hotkey_specs(self.cfg, {})
+        self.ui.hello["hotkeys"] = keys                     # a restarted UI starts with these
+        self.ui.hello["hotkey_standard"] = {m: hotkey_label(k) for m, (k, _) in standard.items()}
+        self.ui.send({"type": "hotkeys", "hotkeys": keys, "standard": self.ui.hello["hotkey_standard"]})
+
     def reload_settings(self):
         old_keep = bool(self.settings.get("keepModelsLoaded"))
+        def keys(prefs):
+            specs = hotkey_specs(self.cfg, prefs)
+            return specs, ui_ocr_key(prefs, specs)        # the UI's key decides who is strict too
+        old_keys = keys(self.settings)
         self.settings = settings.load()
+        if keys(self.settings) != old_keys:
+            from PyObjCTools import AppHelper
+            AppHelper.callAfter(self.install_hotkeys)     # NSEvent monitors live on the main thread
         keep = bool(self.settings.get("keepModelsLoaded"))
         self.cleaner.keep_loaded = keep
         self.dictionary.reload()
@@ -356,7 +522,7 @@ class VoiceBud:
                             and not ptt.held_now() else 0
                         if released >= LEVEL_HZ // 2:
                             released = 0
-                            AppHelper.callAfter(self.stop_rec, owner)
+                            AppHelper.callAfter(self._missed_release, owner)
                 except Exception:
                     traceback.print_exc()
                     time.sleep(0.5)
@@ -388,6 +554,7 @@ class VoiceBud:
             threading.Thread(target=self.onboarding.show, daemon=True).start()
         self.worker.begin_take()
         self.worker.preload()  # hidden behind speaking; transcription waits for it if needed
+        self.cleaner.nudge()   # a running LLM worker's idle-time check gives way before Whisper starts
         # SPEC §0: live text is its own switch; with it off Python does not stream at all
         self.live = bool(self.settings.get("liveText"))
         seq = self.seq
@@ -416,6 +583,13 @@ class VoiceBud:
         self.ui.state("recording", mode)
         self._recording.set()
         self._awake(True)
+        try:                          # which system prompt the worker computes first, if it has to start
+            if mode == "command":
+                self.cleaner.hint("command")
+            else:
+                self.cleaner.hint(structure.style_for(frontmost_app(self._own_pids())[1], self.settings.get("appStyles")))
+        except Exception:
+            pass
         if mode != "dictate":
             self._warm_llm()          # prompt and command mode always need the model
         if mode == "command" or self.settings.get("contextLevel", 2) > context.OFF:
@@ -551,6 +725,21 @@ class VoiceBud:
         if self.owner is not None:
             print(f"{what}: ending the running take, text to the clipboard")
             self.stop_rec(self.owner, to_clipboard=True)
+        self._forget_key_presses()
+
+    def _missed_release(self, owner):
+        """A hold take whose release never came (the keys are up): it ends as if released, and a key
+        shortcut forgets its press, or its next press would count as a repeat. Main thread."""
+        ptt = self.ptts.get(owner)
+        if isinstance(ptt, KeyHotkey):
+            ptt.stop()
+        self.stop_rec(owner)
+
+    def _forget_key_presses(self):
+        """The UI's key shortcuts lost their releases (lock, sleep, a dead UI). Main thread."""
+        for ptt in self.ptts.values():
+            if isinstance(ptt, KeyHotkey):
+                ptt.stop()
 
     def _llm_inputs(self, text, lang, snap, pid, style):
         """Everything the cleanup of a dictation depends on, from the transcript: the text after
@@ -831,6 +1020,7 @@ class VoiceBud:
         self.onboarding.watch(False)
         from PyObjCTools import AppHelper
         AppHelper.callAfter(self.mic_meter, False)
+        AppHelper.callAfter(self._forget_key_presses)
 
     def _on_onboarding(self, msg):
         """Status checks start child processes (up to 10 s): never on the main thread, where they
@@ -1148,11 +1338,62 @@ class VoiceBud:
         fallback = f", fallback T{temp:.1f}" if temp else ""
         if getattr(res, "speculative", False):
             fallback += ", ahead"
+        # stopwatch v2 (10.10.): fields only ever added at the end, so older lines stay comparable;
+        # numbers only, and a broken probe prints "?" instead of costing the line
+        extra = []
+        try:
+            enc = getattr(self.stt, "last_encoder", None)
+            extra.append("enc -" if enc is None else f"enc {enc[0]}+{enc[1]} reused")   # "-": under 30 s, no memo
+        except Exception:
+            extra.append("enc ?")
+        try:
+            if s and "prefix" in s:
+                extra.append(f"prefix {float(s.get('prefix') or 0):.2f}s{' cached' if s.get('cached') else ''}")
+        except Exception:
+            extra.append("prefix ?")
 
         print(f"{time.strftime('%H:%M:%S')} ⏱ audio {res.audio_s:.1f}s | STT after stop {t_stt - t_stop:.2f}s "
               f"({res.segments} segments, {res.partials} partials{fallback}) | {llm} | "
               f"paste {t_done - t_llm:.2f}s ({target}) | total {t_done - t_stop:.2f}s | "
-              f"RAM {footprint_mb():.0f} MB", flush=True)
+              f"RAM {footprint_mb():.0f} MB | {', '.join(extra)}", flush=True)
+
+
+def machine_line():
+    """One line per start with what decides the speed (10.10.: testers on M1-M4 send their stopwatch
+    lines, and these say which Mac they came from). Numbers and names only; never fails."""
+    import ctypes
+    import platform
+
+    def sysctl(name):
+        try:
+            libc = ctypes.CDLL(None)
+            size = ctypes.c_size_t(0)
+            if libc.sysctlbyname(name.encode(), None, ctypes.byref(size), None, 0) != 0 or not size.value:
+                return ""
+            buf = ctypes.create_string_buffer(size.value)
+            if libc.sysctlbyname(name.encode(), buf, ctypes.byref(size), None, 0) != 0:
+                return ""
+            return buf.raw[:size.value]
+        except Exception:
+            return ""
+
+    def text(name):
+        raw = sysctl(name)
+        return raw.rstrip(b"\0").decode(errors="replace") if isinstance(raw, bytes) else "?"
+
+    try:
+        mem = int.from_bytes(sysctl("hw.memsize") or b"", "little") / 2**30
+    except Exception:
+        mem = 0
+    versions = []
+    for pkg in ("mlx", "mlx_lm", "mlx_whisper"):
+        try:
+            from importlib.metadata import version
+            versions.append(f"{pkg} {version(pkg.replace('_', '-'))}")
+        except Exception:
+            versions.append(f"{pkg} ?")
+    return (f"machine: {text('machdep.cpu.brand_string') or '?'} | {mem:.0f} GB | macOS {platform.mac_ver()[0] or '?'} "
+            f"({text('kern.osversion') or '?'}) | {', '.join(versions)}")
 
 
 LOG = os.path.expanduser("~/Library/Logs/voicebud.log")
@@ -1196,33 +1437,16 @@ def main():
     app = NSApplication.sharedApplication()
     app.setActivationPolicy_(1)  # accessory: no Dock icon; the Swift helper owns the menu bar
 
+    import oscheck
+    too_old = oscheck.unsupported()
+    if too_old:  # MLX would load, then fail in every take: say why before any model download
+        oscheck.explain(*too_old, lang=oscheck.language(settings.load().get("uiLanguage")))
+        return
+
     vb = VoiceBud(cfg)
     vb.start()
 
-    key = cfg["hotkey"]["key"]
-    mode = cfg["hotkey"].get("mode", "hold")
-    vb.ptts["dictate"] = PushToTalk(key, lambda: vb.start_rec("dictate"), lambda: vb.stop_rec("dictate"),
-               active=lambda: vb.owner == "dictate", on_cancel=lambda: vb.cancel_rec("dictate"), mode=mode,
-               on_chord=vb.ui.prepare).start()
-    action = "Press" if mode == "toggle" else "Hold"
-    print(f"{APP_NAME} ready. {action} [{key}] to dictate ({mode} mode).")
-
-    pcfg = cfg.get("prompt_hotkey")
-    if pcfg:
-        pmode = pcfg.get("mode", "hold")
-        vb.ptts["prompt"] = PushToTalk(pcfg["key"], lambda: vb.start_rec("prompt"), lambda: vb.stop_rec("prompt"),
-               active=lambda: vb.owner == "prompt", on_cancel=lambda: vb.cancel_rec("prompt"),
-                   mode=pmode, on_chord=vb.ui.prepare).start()
-        paction = "Press" if pmode == "toggle" else "Hold"
-        print(f"{paction} [{pcfg['key']}] to turn speech into a structured AI prompt.")
-
-    ccfg = cfg.get("command_hotkey")
-    if ccfg:
-        cmode = ccfg.get("mode", "hold")
-        vb.ptts["command"] = PushToTalk(ccfg["key"], lambda: vb.start_rec("command"), lambda: vb.stop_rec("command"),
-               active=lambda: vb.owner == "command", on_cancel=lambda: vb.cancel_rec("command"),
-                   mode=cmode, on_chord=vb.ui.prepare).start()
-        print(f"{'Press' if cmode == 'toggle' else 'Hold'} [{ccfg['key']}] over selected text to edit it by voice.")
+    vb.install_hotkeys()
 
     # SIGTERM from the app launcher / Ctrl+C: shut the UI child down cleanly, too
     MachSignals.signal(signal.SIGTERM, vb.shutdown)

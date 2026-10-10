@@ -31,6 +31,14 @@ final class Loc: @unchecked Sendable {   // written on the main thread only, whe
 
     var english: Bool { lang == "en" }
 
+    /// the text recognition's shortcut as it reads (10.10.: it can be changed in the hub); every
+    /// text names it as "⇧⌘2" and L() puts this in
+    private(set) var ocrKey = "⇧⌘2"
+
+    func apply(ocrKey label: String) {
+        if label != ocrKey { ocrKey = label }
+    }
+
     /// German text -> English, from every part of the app
     nonisolated static let en: [String: String] = {
         var all: [String: String] = [:]
@@ -42,6 +50,9 @@ final class Loc: @unchecked Sendable {   // written on the main thread only, whe
 /// A text of the app in the current language. `args` fill %@ / %d placeholders like
 /// String(format:), in both languages.
 func L(_ german: String, _ args: CVarArg...) -> String {
-    let text = Loc.shared.english ? (Loc.en[german] ?? german) : german
+    var text = Loc.shared.english ? (Loc.en[german] ?? german) : german
+    if Loc.shared.ocrKey != "⇧⌘2" && text.contains("⇧⌘2") {
+        text = text.replacingOccurrences(of: "⇧⌘2", with: Loc.shared.ocrKey)
+    }
     return args.isEmpty ? text : String(format: text, arguments: args)
 }

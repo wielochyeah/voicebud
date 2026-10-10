@@ -67,6 +67,50 @@ class CleanerTest(unittest.TestCase):
         self.assertTrue(wait(c.is_ready))
         self.assertEqual(c.clean(long, "de"), "Das Meeting ist morgen um zehn Uhr im großen Raum.")
 
+    def test_queue_wait_does_not_count(self):
+        """10.10.: the clock starts when the worker takes the request; a wait in its queue (behind a
+        prompt being computed on a slow Mac) no longer kills it and returns raw text."""
+        c = self.make("--queue", "1.5")
+        c.warm(prefill=False)
+        self.assertTrue(wait(c.is_ready))
+        t = time.time()
+        out = c._generate("sys", "<transkript>\nähm, hallo welt\n</transkript>", 50, 0.0, timeout=1.0)
+        self.assertEqual(out, "Hallo welt")
+        self.assertGreater(time.time() - t, 1.4)
+        self.assertTrue(c._alive(), "nobody was killed")
+
+    def test_started_is_never_the_answer(self):
+        c = self.make("--gen", "0.3")
+        c.warm(prefill=False)
+        self.assertTrue(wait(c.is_ready))
+        self.assertEqual(c._generate("sys", "<transkript>\nähm, gut\n</transkript>", 50, 0.0, timeout=5.0), "Gut")
+        self.assertEqual(c._started, {})
+
+    def test_a_hang_after_the_start_still_ends(self):
+        c = self.make("--gen", "5")
+        c.warm(prefill=False)
+        self.assertTrue(wait(c.is_ready))
+        t = time.time()
+        self.assertIsNone(c._generate("sys", "<transkript>\nx\n</transkript>", 50, 0.0, timeout=1.0))
+        self.assertLess(time.time() - t, 3.0)
+
+    def test_prefill_likely_prompt_first(self):
+        import tempfile
+        from pathlib import Path
+        log = Path(tempfile.mkdtemp()) / "ops.jsonl"
+        c = self.make("--log", str(log))
+        c.hint("mail")
+        c.warm()
+        self.assertTrue(wait(lambda: log.exists() and len(log.read_text().splitlines()) >= 4))
+        ops = [__import__("json").loads(l) for l in log.read_text().splitlines()]
+        prefills = [o["systems"] for o in ops if o["op"] == "prefill"]
+        self.assertEqual(len(prefills), 4)                                  # one prompt per item
+        self.assertTrue(all(len(p) == 1 for p in prefills))
+        mail = c.prompts.system("de", "mail")[:40]
+        self.assertEqual(prefills[0][0], mail)
+        c.hint("whatever")
+        self.assertEqual(c._first, "doc")
+
     def test_prompt_mode_keeps_its_lines(self):
         c = self.make()
         out = c.promptify("mach mir einen Trainingsplan für zwölf Wochen", "de")

@@ -1,12 +1,21 @@
 // English texts for onboarding (Localization.swift): German text as written in the code -> English.
 extension Loc {
     static let onboarding: [String: String] = [
+        "Automatisch erkennt Deutsch oder Englisch je Aufnahme, richtig für alle, die beides sprechen. Beides lässt sich später im Hub unter Allgemein ändern.":
+            "Automatic detects German or English for each take, right for anyone who speaks both. You can change both later in the hub under General.",
+        "Feste Sprache: schneller":
+            "Fixed language: faster",
+        "Schneller diktieren: Sprache fest wählen":
+            "Dictate faster: choose your language",
+        "Jedes Diktat spart den Schritt, in dem VoiceBud die Sprache erkennt.":
+            "Every dictation skips the step in which VoiceBud detects the language.",
+        "Sprichst du nur Deutsch oder nur Englisch, wähl es oben fest. Automatisch erkennt bei jedem Diktat zuerst die Sprache, das kostet auf älteren Macs bis zu zwei Sekunden.":
+            "If you only speak German or only English, choose it above. Automatic first detects the language on every dictation, which costs up to two seconds on older Macs.",
         "Sprache": "Language",
         "Die Sprache der App und die Sprache, in der du diktierst.": "The language of the app and the language you dictate in.",
         "App": "App",
         "Texte in Hub, Insel und Menü": "Texts in the hub, island and menu",
         "Was du sprichst": "What you speak",
-        "Empfohlen ist Automatisch: Es erkennt Deutsch oder Englisch je Aufnahme. Beides lässt sich später im Hub unter Allgemein ändern.": "Automatic is recommended: it detects German or English for each take. You can change both later in the hub under General.",
         // window and footer
         "VoiceBud einrichten": "Set Up VoiceBud",
         "Zurück": "Back",
@@ -25,7 +34,7 @@ extension Loc {
 
         // 2 So funktioniert’s
         "So funktioniert’s": "How It Works",
-        "Drei Tastenkürzel, die in jeder App funktionieren.": "Three shortcuts that work in any app.",
+        "Drei Tastenkürzel, die in jeder App funktionieren. Ändern kannst du sie später im Hub.": "Three shortcuts that work in any app. You can change them later in the hub.",
         "Diktieren": "Dictate",
         "Drücken, sprechen, noch einmal drücken.\nDer Text landet an deinem Cursor.":
             "Press, speak, press again.\nYour text lands at the cursor.",

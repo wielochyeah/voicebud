@@ -28,6 +28,9 @@ DEFAULTS = {
     "menuBarStyle": "schlicht",  # menu bar symbol while recording: schlicht | farbe | punkt | zeit (UI only)
     "uiLanguage": "system",      # the app's texts: system (German on a German Mac, else English) | de | en
     "dictationLanguage": "auto", # what Whisper listens for: auto (de or en per take, recommended) | de | en
+    # the hub's Kurzbefehle over config.yaml: {"dictate"|"prompt"|"command"|"ocr": chord string like "ctrl+alt"
+    # (watched by the core) or {"key", "mods", "label"} (a key the UI registers with macOS)}
+    "shortcuts": {},
 }
 
 

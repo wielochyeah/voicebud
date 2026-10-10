@@ -65,6 +65,7 @@ from AppKit import NSEventTypeFlagsChanged, NSEventTypeKeyDown, NSEventTypeKeyUp
 CTRL = hk._L_CTRL | hk._CTRL
 SHIFT = hk._L_SHIFT | hk._SHIFT
 CMD = hk._L_CMD | hk._CMD
+ALT = hk._L_ALT | hk._ALT
 
 
 class _Ev:
@@ -205,6 +206,158 @@ class ChordTest(unittest.TestCase):
             hotkey._own_event = orig
         self.flags(p, CTRL, 0)
         self.assertEqual(self.calls, ["start", "stop"])
+
+
+
+class ShortcutChoiceTest(unittest.TestCase):
+    """The hub's own shortcuts over config.yaml (10.10.): only keys hotkey.py can watch, never the
+    same keys twice."""
+    CFG = {"hotkey": {"key": "ctrl+shift", "mode": "toggle"},
+           "prompt_hotkey": {"key": "ctrl+alt", "mode": "toggle"},
+           "command_hotkey": {"key": "ctrl+cmd", "mode": "hold"}}
+
+    def specs(self, shortcuts):
+        from main import hotkey_specs
+        return hotkey_specs(self.CFG, {"shortcuts": shortcuts})
+
+    def test_valid(self):
+        from hotkey import valid
+        for spec in ("ctrl+shift", "ctrl+alt", "cmd_r", "alt_r", "f13", "shift+cmd", "ctrl+cmd+f13"):
+            self.assertTrue(valid(spec), spec)
+        for spec in ("cmd", "alt_l", "shift", "ctrl+ctrl", "foo+bar", "", None, 5, "ctrl+a"):
+            self.assertFalse(valid(spec), spec)
+
+    def test_config_without_choices(self):
+        self.assertEqual(self.specs({}), {"dictate": ("ctrl+shift", "toggle"), "prompt": ("ctrl+alt", "toggle"),
+                                          "command": ("ctrl+cmd", "hold")})
+
+    def test_own_choice_keeps_the_mode(self):
+        got = self.specs({"dictate": "cmd_r", "command": "SHIFT+CMD"})
+        self.assertEqual(got["dictate"], ("cmd_r", "toggle"))
+        self.assertEqual(got["command"], ("shift+cmd", "hold"))
+        self.assertEqual(got["prompt"], ("ctrl+alt", "toggle"))
+
+    def test_invalid_or_taken_choices_fall_back(self):
+        got = self.specs({"dictate": "cmd", "prompt": "shift+ctrl", "command": 3})
+        self.assertEqual(got["dictate"], ("ctrl+shift", "toggle"))   # a single left key
+        self.assertEqual(got["prompt"], ("ctrl+alt", "toggle"))      # dictation's keys, in another order
+        self.assertEqual(got["command"], ("ctrl+cmd", "hold"))
+
+    def test_keys_from_the_ui(self):
+        key = {"key": 13, "mods": 4096, "label": "⌃W"}
+        got = self.specs({"dictate": key, "prompt": dict(key)})
+        self.assertEqual(got["dictate"], (key, "toggle"))
+        self.assertEqual(got["prompt"], ("ctrl+alt", "toggle"))       # the same key twice keeps the default
+        self.assertEqual(self.specs({"dictate": {"key": 13}})["dictate"], ("ctrl+shift", "toggle"))
+
+    def test_text_recognition(self):
+        from main import hotkey_specs, hotkey_label
+        self.assertNotIn("ocr", self.specs({}))                       # ⇧⌘2: the UI's own key
+        self.assertNotIn("ocr", self.specs({"ocr": {"key": 17, "mods": 2304, "label": "⌥⌘T"}}))
+        self.assertEqual(self.specs({"ocr": "ctrl+alt+shift"})["ocr"], ("ctrl+alt+shift", "toggle"))
+        self.assertNotIn("ocr", self.specs({"ocr": "ctrl+shift"}))    # dictation's chord
+        off = hotkey_specs(self.CFG, {"shortcuts": {"ocr": "ctrl+alt+shift"}, "screenText": False})
+        self.assertNotIn("ocr", off)
+        self.assertEqual(hotkey_label({"key": 13, "mods": 4096, "label": "⌃W"}), "label:⌃W")
+        self.assertEqual(hotkey_label("ctrl+alt"), "ctrl+alt")
+
+    def test_move_then_take(self):
+        got = self.specs({"prompt": "ctrl+alt+shift", "dictate": "ctrl+alt"})
+        self.assertEqual(got["dictate"], ("ctrl+alt", "toggle"))
+        self.assertEqual(got["prompt"], ("ctrl+alt+shift", "toggle"))
+
+    def test_swap(self):
+        got = self.specs({"dictate": "ctrl+alt", "prompt": "ctrl+shift"})
+        self.assertEqual(got["dictate"], ("ctrl+alt", "toggle"))
+        self.assertEqual(got["prompt"], ("ctrl+shift", "toggle"))
+
+    def test_settings_without_shortcuts(self):
+        from main import hotkey_specs
+        self.assertEqual(hotkey_specs(self.CFG, {"shortcuts": "x"})["dictate"], ("ctrl+shift", "toggle"))
+        self.assertEqual(hotkey_specs(self.CFG, {})["prompt"], ("ctrl+alt", "toggle"))
+
+
+class KeyHotkeyTest(unittest.TestCase):
+    """Keys the UI holds for the core (10.10.: ⌃W, ⌃⌥D, F5): toggle on the press, hold while down,
+    repeats while held ignored."""
+    SPEC = {"key": 13, "mods": 4096, "label": "⌃W"}
+
+    def make(self, mode):
+        self.owner, self.calls = None, []
+
+        def start():
+            self.calls.append("start")
+            self.owner = "x"
+
+        def stop():
+            self.calls.append("stop")
+            self.owner = None
+        return hk.KeyHotkey(self.SPEC, start, stop, mode=mode, active=lambda: self.owner == "x",
+                            on_chord=lambda: self.calls.append("chord"))
+
+    def test_toggle(self):
+        k = self.make("toggle")
+        k.event(True); k.event(True); k.event(False)       # a repeat while held does nothing
+        k.event(True); k.event(False)
+        self.assertEqual(self.calls, ["chord", "start", "stop"])
+
+    def test_toggle_follows_the_app(self):
+        k = self.make("toggle")
+        k.event(True); k.event(False)
+        self.owner = None                                    # the take ended elsewhere
+        k.event(True); k.event(False)
+        self.assertEqual(self.calls, ["chord", "start", "chord", "start"])
+
+    def test_hold(self):
+        k = self.make("hold")
+        k.event(True); k.event(True); k.event(False); k.event(False)
+        self.assertEqual(self.calls, ["chord", "start", "stop"])
+
+    def test_release_without_press(self):
+        k = self.make("hold")
+        k.event(False)
+        self.assertEqual(self.calls, [])
+
+    def test_valid_key(self):
+        self.assertTrue(hk.valid_key(self.SPEC))
+        self.assertTrue(hk.valid_key({"key": 13.0, "mods": 4096.0, "label": "⌃W"}))   # as the UI reads it
+        self.assertFalse(hk.valid_key({"key": 13.5, "mods": 4096, "label": "⌃W"}))
+        for bad in ({"key": 13, "mods": 4096}, {"key": 200, "mods": 0, "label": "x"}, {"key": True, "mods": 0, "label": "x"},
+                    {"key": 13, "mods": 1, "label": "x"}, {"key": 13, "mods": 4096, "label": ""}, "ctrl+w", None):
+            self.assertFalse(hk.valid_key(bad), bad)
+
+
+
+class StrictChordTest(unittest.TestCase):
+    """A chord inside a longer shortcut (10.10.: ⌃⌥ for the prompt next to a key ⌃⌥⇧K): letting go of
+    the longer one must not complete the inner chord late."""
+    make = ChordTest.make
+    flags = ChordTest.flags
+
+    def test_inner_chord_not_completed_by_letting_go(self):
+        p = self.make("ctrl+alt")
+        self.flags(p, CTRL, CTRL | SHIFT, CTRL | SHIFT | ALT, CTRL | ALT, 0)      # ⇧ let go first
+        self.assertEqual(self.calls, ["start"])                                  # without strict: a take
+        p = self.make("ctrl+alt")
+        p.strict = True
+        self.flags(p, CTRL, CTRL | SHIFT, CTRL | SHIFT | ALT, CTRL | ALT, 0)
+        self.assertEqual(self.calls, [])
+        self.flags(p, CTRL, CTRL | ALT, CTRL, 0)                                  # a clean press still works
+        self.assertEqual(self.calls, ["start"])
+
+    def test_installed_mid_press_waits(self):
+        import Quartz
+        held = Quartz.CGEventSourceFlagsState
+        Quartz.CGEventSourceFlagsState = lambda state: CTRL | ALT | SHIFT
+        try:
+            p = self.make("ctrl+shift")
+            p._seed_armed()                                                       # what start() does first
+        finally:
+            Quartz.CGEventSourceFlagsState = held
+        self.flags(p, CTRL | SHIFT, 0)                                            # ⌥ let go first
+        self.assertEqual(self.calls, [])
+        self.flags(p, CTRL, CTRL | SHIFT, CTRL, 0)
+        self.assertEqual(self.calls, ["start"])
 
 
 if __name__ == "__main__":

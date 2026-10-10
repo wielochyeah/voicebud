@@ -11,6 +11,8 @@ Press `ctrl+shift` in any app → speak → press again → clean text appears a
 
 Built with Claude Code (planned with Opus 4.8, built with Fable 5).
 
+**Requirements:** A Mac with Apple Silicon (M1 or newer) and macOS 26.2 or later; the bundled MLX needs that version. 16 GB of memory is recommended.
+
 **Permissions:** Microphone, Input Monitoring (the hotkeys) and Accessibility (pasting, screen context), asked step by step in the setup window. Screen Recording for the text recognition and, optionally, Automation for Microsoft Word (font of formulas) are asked the first time you use them. Everything runs on your Mac.
 
 The interface is in English or German: it follows your Mac's language until you pick one. Dictation works in German and English, and in a mix of both.
@@ -21,7 +23,7 @@ All screenshots below are rendered from the app itself.
 
 ### Language
 
-Right after the welcome, setup asks for two languages: the app's own (English or German, preset from your Mac) and the language you dictate in. Automatic is recommended: it detects German or English for each take. Both can be changed later in the hub under General.
+Right after the welcome, setup asks for two languages: the app's own (English or German, preset from your Mac) and the language you dictate in. Automatic detects German or English for each take. If you only dictate in one language, choose it: that skips the detection, up to two seconds per dictation on older Macs (M1 to M4). Both can be changed later in the hub under General.
 
 ![The language step in setup](docs/screenshots/setup-language.png)
 
@@ -124,7 +126,7 @@ From 5 seconds the island counts the seconds; from 10 seconds it says so and off
 
 ### The hub
 
-History with the original transcript next to the cleaned text, recognized text, the dictionary, snippets, the look of the island, screen context per app, text recognition with formulas per app, and general settings, including both languages. Open it from the microphone in the menu bar.
+History with the original transcript next to the cleaned text, recognized text, the dictionary, snippets, the look of the island, screen context per app, text recognition with formulas per app, and general settings, including both languages and the keyboard shortcuts. Open it from the microphone in the menu bar.
 
 ![History, with the original transcript unfolded](docs/screenshots/hub-verlauf.png)
 
@@ -133,6 +135,16 @@ History with the original transcript next to the cleaned text, recognized text, 
 ![Screen context per app](docs/screenshots/hub-kontext.png)
 
 ![General settings](docs/screenshots/hub-allgemein.png)
+
+#### Your own shortcuts
+
+The keys above are the defaults. Each of the four can be changed in the hub under General, Keyboard Shortcuts: click Change and press the new keys, and Default brings the original back. No restart needed, and while you press them nothing starts.
+- **Modifier keys alone:** `ctrl`, `option`, `shift` and `cmd`, two or more of them, or one right-hand key alone (the right `cmd`, say; not for Command, which starts the moment it is pressed). Hold them together and let go.
+- **Modifiers with a key:** Like `ctrl+W`, `option+shift+cmd+D` or an F-key. VoiceBud registers them with macOS, so the key never reaches the app in front, and holding works for Command too.
+- **What is refused, and why:** Anything macOS uses system-wide (Spotlight, screenshots, Mission Control and whatever is switched on in System Settings), what nearly every app or the text system needs (`cmd+W`, `ctrl+A`), keys that type a character you need (`option+L` is `@` on a German layout, signs, €, quotation marks, accents), and combinations that would start another of VoiceBud's shortcuts as well (a shorter one inside a longer one is made safe instead: it only counts when pressed on its own). The row says in red what the keys do instead, offers a free variant on the same key and keeps listening for another try.
+- **Notes:** A combination that only some apps use is taken with a note and an Undo, like `ctrl+W`, which deletes a word in the Terminal, or `option+Y`, which types `¥`.
+
+![Changing a shortcut](docs/screenshots/hub-kurzbefehle.png)
 
 ### Menu bar
 

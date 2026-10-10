@@ -24,6 +24,12 @@ llm:
   # you speak and exits after this many idle minutes, so idle VoiceBud holds none of it.
   # The hub setting "Modelle im RAM halten" (keepModelsLoaded) keeps it running instead.
   idle_unload_minutes: 5
+  # Lookahead decoding (lookahead.py; not the speculative cleanup in speech pauses): the next tokens
+  # are guessed from the transcript and one forward pass checks several at once. Same text bit for
+  # bit. auto = M1-M4, after a one-time check per machine in idle time (identical and >= 8% faster);
+  # M5 and newer stay off so they run exactly as before. on = anywhere, to test it. auto | on | off
+  # (the earlier name "speculative" is still read)
+  lookahead: auto
   min_words_for_cleanup: 4        # shorter takes get only the fixed rules (commands, numbers)
   min_words_to_wait_for_load: 10  # a model that is not loaded yet is waited for (~2 s) only from here
   # The cleanup instructions live in prompts/ (clean_de.txt, clean_en.txt, styles.json per app style).

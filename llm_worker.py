@@ -4,17 +4,22 @@ and its libraries (~130 MB that an in-process unload would leave behind) leave R
 
 Requests:  {"op": "generate", "id": n, "system": str, "user": str, "max_tokens": n, "temp": t,
             "loop_guard": bool}
-           {"op": "prefill", "systems": [str]}  cache these system prompts now
+           {"op": "prefill", "systems": [str]}  cache these system prompts now (below every request)
            {"op": "touch"}                      restart the idle clock
            {"op": "keep", "value": bool}     stay loaded (settings keepModelsLoaded)
            {"op": "vision"}                     get the formula reader ready (⌥ tapped in ⇧⌘2)
            {"op": "formula", "id": n, "image": path}   read a screen region (formula.py)
            {"op": "quit"}
 Events:    {"event": "ready", "load_s": s} | {"event": "error", "error": str}
+           {"event": "started", "id": n}        a generate request leaves the queue (its clock starts)
            {"id": n, "text": str, "stats": {...}} | {"id": n, "error": str}
 
 The system prompt of each request is prefilled once and kept as a prompt cache (a few, most
 recent first), so a take only prefills its own transcript.
+
+--lookahead auto|on|off (config llm.lookahead): lookahead decoding (lookahead.py), prompt-lookup
+speculative decoding for greedy requests, same text bit for bit. auto = M1-M4 only, after a one-time
+check per machine in idle time that it is identical and faster; on = anywhere (still checked).
 
 Formulas (05.10.): the same Qwen3.5 checkpoint has a vision part. It is built on the first formula
 request around the language weights already loaded here (the very same arrays, measured: +0.67 GB
@@ -41,6 +46,38 @@ FORMULA_PROMPT = ("Transcribe all text in this image exactly as written, in its 
                   "lists as '- ' lines. Output only the transcription.")
 
 
+def _sysctl(name):
+    """A sysctl string, read in-process (no subprocess, no PATH); "" if unreadable."""
+    try:
+        import ctypes
+        f = ctypes.CDLL(None).sysctlbyname
+        f.argtypes = [ctypes.c_char_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_void_p,
+                      ctypes.c_size_t]
+        f.restype = ctypes.c_int
+        size = ctypes.c_size_t(0)
+        if f(name.encode(), None, ctypes.byref(size), None, 0) != 0 or not size.value:
+            return ""
+        buf = ctypes.create_string_buffer(size.value)
+        if f(name.encode(), buf, ctypes.byref(size), None, 0) != 0:
+            return ""
+        return buf.value.decode("utf-8", "replace").strip()
+    except Exception:
+        return ""
+
+
+def _chip_gen(brand):
+    """1 for "Apple M1 Pro", 5 for "Apple M5 Pro", None for anything else."""
+    import re
+    m = re.match(r"Apple M(\d+)\b", brand or "")
+    return int(m.group(1)) if m else None
+
+
+def _one_line(text, limit=200):
+    """An error for the log: its first line only (a Metal compiler error runs over many)."""
+    lines = str(text).strip().splitlines() or [""]
+    return lines[0][:limit]
+
+
 def _looping(toks):
     """The newest LOOP_WINDOW tokens already appear twice earlier: the model repeats itself."""
     tail = toks[-LOOP_WINDOW:]
@@ -54,12 +91,69 @@ def _looping(toks):
     return hits >= 2
 
 
+def readahead_ranges(path, skip=("vision_tower",)):
+    """Byte ranges of a safetensors file worth reading ahead: every tensor but the vision part (not
+    used for dictation), merged where the gap is under 1 MiB, each at most 1 GiB. Empty on any doubt."""
+    import struct
+    try:
+        with open(path, "rb") as f:
+            n = struct.unpack("<Q", f.read(8))[0]
+            if not 0 < n < 64 * 2**20:
+                return []
+            header = json.loads(f.read(n))
+        size = os.path.getsize(path)
+        base = 8 + n
+        spans = sorted((base + t["data_offsets"][0], base + t["data_offsets"][1])
+                       for name, t in header.items()
+                       if name != "__metadata__" and not any(name.startswith(s) or f".{s}" in name for s in skip))
+    except Exception:
+        return []
+    merged = []
+    for a, b in spans:
+        if b <= a or b > size:
+            continue
+        if merged and a - merged[-1][1] < 2**20:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
+    out = []
+    for a, b in merged:
+        while a < b:
+            out.append((a, min(b, a + 2**30)))
+            a = out[-1][1]
+    return out
+
+
+def readahead(folder):
+    """Ask macOS to read the model's language weights into the file cache while Python imports its
+    libraries (10.10.: after the idle exit a 16 GB Mac has often dropped them, and the load then read
+    2.2 GB only after the imports). Same bytes either way; it never blocks the worker and any error
+    leaves the load as it was. F_RDADVISE = 44, struct radvisory {off_t offset; int count;}."""
+    import fcntl
+    import struct
+    try:
+        for path in sorted(os.path.join(folder, n) for n in os.listdir(folder) if n.endswith(".safetensors")):
+            fd = os.open(path, os.O_RDONLY)
+            try:
+                for a, b in readahead_ranges(path):
+                    fcntl.fcntl(fd, 44, struct.pack("=qi4x", a, b - a))
+            finally:
+                os.close(fd)
+    except Exception as e:
+        print(f"readahead skipped ({type(e).__name__}: {e})")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
     ap.add_argument("--idle", type=float, default=300.0)
     ap.add_argument("--keep", action="store_true")
+    ap.add_argument("--lookahead", "--speculative", dest="lookahead", choices=("auto", "on", "off"),
+                    default="auto")
+    ap.add_argument("--readahead", default="", help="the model's folder: its weights are read ahead")
     args = ap.parse_args()
+    if args.readahead:            # first of all, so the disk works while the libraries import
+        threading.Thread(target=readahead, args=(args.readahead,), name="readahead", daemon=True).start()
 
     proto = os.fdopen(os.dup(1), "w", buffering=1)
     os.dup2(2, 1)                 # whatever a library prints goes to the log, never into the protocol
@@ -96,6 +190,115 @@ def main():
     state["last"] = time.time()
     prefixes = OrderedDict()
 
+    # lookahead decoding (lookahead.py). auto = M1-M4 only; M5 and newer stay off so the owner's M5 Pro
+    # runs exactly as before (it measured 1.2x faster forced on), and an unknown chip stays off; neither
+    # ever imports lookahead.py. on = anywhere, to test it. Before it is used on a machine a one-time
+    # check (remembered per chip, macOS build, MLX versions, model and code) runs in idle time: a
+    # bit-for-bit self-test and a fixed take through both paths, timed. Any difference, error or crash
+    # keeps it off on that machine, and auto also needs the take to be at least 8% faster.
+    la = {"on": False, "decided": args.lookahead == "off", "mod": None, "key": None, "seen": None,
+          "vouched": False, "tested": None}
+    brand = _sysctl("machdep.cpu.brand_string") if args.lookahead != "off" else ""
+    if args.lookahead == "auto" and not 1 <= (_chip_gen(brand) or 0) <= 4:
+        la["decided"] = True
+        print(f"lookahead decoding off (auto, {brand or 'unknown chip'})")
+
+    def la_key(mod):
+        """The machine key, or "" when the chip or macOS build cannot be read (then nothing is kept)."""
+        if la["key"] is None:
+            os_build = _sysctl("kern.osversion")
+            la["key"] = mod.machine_key(model, args.model, brand, os_build) if brand and os_build else ""
+        return la["key"]
+
+    def la_failed(why):
+        """Plain decoding for the rest of this process, and remembered for this machine."""
+        la.update(on=False, decided=True)
+        try:
+            import lookahead
+            lookahead.uninstall()
+            if la_key(lookahead):
+                lookahead.remember(la["key"], {"exact": False, "reason": _one_line(why)})
+        except Exception:
+            pass
+
+    def la_check(abort):
+        """The bit-for-bit self-test, then the fixed takes plain, lookahead, lookahead, plain (same
+        tokens every time; the worse of the two speed ratios counts). None if a request came in."""
+        import lookahead
+        if not lookahead.supported(model, make_prompt_cache(model)):
+            return {"exact": False, "reason": "model caches not supported"}
+        lookahead.install()
+        la["mod"] = lookahead
+        t = time.time()
+        if la["tested"] is None:           # a check resumed after giving way skips a passed self-test
+            exact, step = lookahead.self_test(model, tok, lambda: make_prompt_cache(model),
+                                              make_sampler(temp=0.0), abort)
+            if exact is None:
+                return None
+            la["tested"] = (exact, step)
+        exact, step = la["tested"]
+        tps = round(1 / max(step, 1e-6))
+        if not exact:
+            return {"exact": False, "reason": "checking pass not bit-identical", "tps": tps}
+        system = next(iter(prefixes)) if prefixes else "Schreib den Text sauber ab."
+        first, runs = {}, []
+        for use in (False, True, True, False):
+            secs = 0.0
+            for text in lookahead.CANNED:
+                if abort and abort():
+                    return None
+                req = {"id": None, "system": system, "user": f"<transkript>\n{text}\n</transkript>",
+                       "max_tokens": int(len(text) * 0.6) + 64, "temp": 0.0}
+                out, stats, toks = generate(req, use_spec=use, abort=abort, strict=True)
+                if stats["cancelled"]:
+                    return None
+                if first.setdefault(text, (out, toks)) != (out, toks):
+                    return {"exact": False, "reason": "canned take differs", "tps": tps}
+                secs += stats["eval"]
+            runs.append(round(secs, 3))
+        ratio = max(runs[1] / max(runs[0], 1e-6), runs[2] / max(runs[3], 1e-6))
+        return {"exact": True, "reason": "", "tps": tps, "tokens": sum(len(v[1]) for v in first.values()),
+                "plain_s": [runs[0], runs[3]], "lookahead_s": [runs[1], runs[2]], "ratio": round(ratio, 3),
+                "fast": ratio <= 0.92, "check_s": round(time.time() - t, 2)}
+
+    def la_decide(abort):
+        """Once per process, from the main loop after 30 s without a request; gives way to one."""
+        if la["decided"]:
+            return
+        try:
+            import lookahead
+            key = la_key(lookahead)
+            seen = lookahead.remembered(key) if key else None
+            fresh = seen is None
+            if fresh:
+                if key:      # a crash inside the check leaves this behind: off on the next start
+                    lookahead.remember(key, {"exact": False, "reason": "check did not finish"})
+                seen = la_check(abort)
+                if seen is None:                   # gave way to a request: not done, not failed
+                    lookahead.uninstall()
+                    if key:
+                        lookahead.forget(key)
+                    return
+                if key:
+                    lookahead.remember(key, seen)
+            la["decided"], la["seen"] = True, seen
+            la["on"] = bool(seen.get("exact")) and (args.lookahead == "on" or bool(seen.get("fast")))
+            if la["on"]:
+                lookahead.install()
+                la["mod"] = lookahead
+            else:
+                lookahead.uninstall()
+            if not seen.get("exact"):
+                verdict = f"failed: {seen.get('reason')}"
+            else:
+                verdict = f"identical, {seen.get('ratio')} of the plain time" + (
+                    "" if seen.get("fast") else ", under 8% faster: off on auto")
+            print(f"lookahead decoding {'on' if la['on'] else 'off'} ({args.lookahead}, {brand}; "
+                  f"check {'now' if fresh else 'of ' + str(seen.get('checked'))}: {verdict})")
+        except Exception as e:     # a kernel that does not compile, another MLX: plain decoding
+            la_failed(f"{type(e).__name__}: {e}")
+            print(f"lookahead decoding off ({_one_line(f'{type(e).__name__}: {e}')})")
+
     def chat(system, user):
         msgs = [{"role": "system", "content": system}, {"role": "user", "content": user}]
         try:
@@ -119,32 +322,72 @@ def main():
             prefixes.popitem(last=False)
         return prefixes[system], time.time() - t
 
-    def generate(req):
+    def generate(req, use_spec=None, abort=None, strict=False):
+        """(text, stats, tokens). use_spec None: as decided for this process (undecided = plain; the
+        check never holds up a take). A lookahead run that fails in any way is done again plainly
+        (one log line, plain from then on); strict (the check) lets the error through instead."""
         (pids, pcache), prefix_s = prefix(req["system"])
         ids = tok.encode(chat(req["system"], req["user"]))
+        temp = float(req.get("temp", 0.0))
+        if use_spec is None:      # greedy only (sampling draws would not line up), short contexts only
+            use_spec = la["on"] and temp == 0.0 and len(ids) < la["mod"].MAX_CONTEXT
+        if not use_spec:
+            return run(req, pids, pcache, ids, temp, prefix_s, False, abort)
+        vouch = not strict and not la["vouched"] and bool(la["key"])
+        if vouch:     # the first lookahead take of a process: a crash in it leaves this behind
+            la["mod"].remember(la["key"], {"exact": False, "reason": "lookahead run did not finish"})
+        try:
+            out = run(req, pids, pcache, ids, temp, prefix_s, True, abort)
+        except Exception as e:
+            if strict:
+                raise
+            la_failed(f"{type(e).__name__}: {e}")
+            print(f"lookahead decoding failed ({_one_line(f'{type(e).__name__}: {e}')}); plain decoding from now on")
+            return run(req, pids, pcache, ids, temp, prefix_s, False, abort)
+        if vouch:
+            la["mod"].remember(la["key"], la["seen"])      # the passed check again, with its own date
+            la["vouched"] = True
+        return out
+
+    def run(req, pids, pcache, ids, temp, prefix_s, use_spec, abort):
         if ids[:len(pids)] == pids:
             cache, feed = copy.deepcopy(pcache), ids[len(pids):]
         else:                     # the template tokenised across the boundary: no shortcut
             cache, feed = make_prompt_cache(model), ids
-        sampler = make_sampler(temp=float(req.get("temp", 0.0)))
+        sampler = make_sampler(temp=temp)
+        sstats = None
+        if use_spec:
+            # guesses come from the user part of the prompt (the transcript, the selection)
+            sstats = {}
+            steps = la["mod"].stream_generate(model, tok, feed, int(req.get("max_tokens", 256)), sampler,
+                                              cache, feed, sstats)
+        else:
+            # prefill_step_size: mlx-lm's default today, pinned because lookahead.PREFILL_STEP must match
+            # it (another split changes the cache bits); not imported, M5+ never loads lookahead.py
+            steps = stream_generate(model, tok, feed, max_tokens=int(req.get("max_tokens", 256)),
+                                    sampler=sampler, prompt_cache=cache, prefill_step_size=2048)
         t, text, last, toks, looped, stopped = time.time(), "", None, [], False, False
-        for r in stream_generate(model, tok, feed, max_tokens=int(req.get("max_tokens", 256)),
-                                 sampler=sampler, prompt_cache=cache):
+        for r in steps:
             text += r.text
             last = r
             toks.append(r.token)
-            if req.get("id") in cancelled:     # a speculative request that is no longer needed
+            if req.get("id") in cancelled or (abort and abort()):   # no longer needed
                 stopped = True
                 break
             if req.get("loop_guard") and len(toks) >= 3 * LOOP_WINDOW and len(toks) % 8 == 0 and _looping(toks):
                 looped = True
                 break
+        if hasattr(steps, "close"):
+            steps.close()
         total = time.time() - t
         prompt_s = (last.prompt_tokens / last.prompt_tps) if last and last.prompt_tps else 0.0
-        return text, {"prefix": round(prefix_s, 3), "prompt": round(prompt_s, 3),
-                      "eval": round(max(0.0, total - prompt_s), 3),
-                      "tokens": last.generation_tokens if last else 0,
-                      "cached": len(feed) < len(ids), "looped": looped, "cancelled": stopped}
+        stats = {"prefix": round(prefix_s, 3), "prompt": round(prompt_s, 3),
+                 "eval": round(max(0.0, total - prompt_s), 3),
+                 "tokens": last.generation_tokens if last else 0,
+                 "cached": len(feed) < len(ids), "looped": looped, "cancelled": stopped}
+        if sstats is not None:
+            stats.update(sstats)        # passes (forward passes), proposed and accepted guesses
+        return text, stats, toks
 
     vision = {"model": None, "processor": None, "last": 0.0}
 
@@ -235,16 +478,32 @@ def main():
                     spec_ids.add(req.get("id"))
                 else:
                     cancelled.update(spec_ids)
-            inbox.put((1 if req.get("spec") else 0, next(order), req))
+            # a system prompt computed ahead comes after every request, one prompt per item: a take
+            # waits for the prompt being computed, never for the rest of the list (10.10.: on an M1
+            # all four took ~15 s, and a short take after a pause waited behind all of them)
+            prio = 2 if req.get("op") == "prefill" else 1 if req.get("spec") else 0
+            inbox.put((prio, next(order), req))
         inbox.put((0, next(order), {"op": "quit"}))
     threading.Thread(target=reader, name="stdin", daemon=True).start()
 
+    last_op = time.time()
     while True:
         drop_vision()                 # unused for --idle: the formula reader goes (the dictation model stays)
         try:
-            req = inbox.get(timeout=30)[2]
+            req = inbox.get(timeout=5)[2]
         except queue.Empty:
+            # the lookahead check only after 30 s without any request (not while the user speaks:
+            # a key press sends "touch"), and it gives way to the next one; the idle exit still
+            # counts from the last request
+            if not la["decided"] and time.time() - last_op >= 30:
+                state["busy"] = True
+                try:
+                    la_decide(abort=lambda: not inbox.empty())
+                finally:
+                    mx.clear_cache()
+                    state["busy"] = False
             continue
+        last_op = time.time()
         op = req.get("op")
         if op == "quit":
             break
@@ -295,8 +554,9 @@ def main():
             send({"id": req.get("id"), "cancelled": True})
             continue
         state["busy"] = True
+        send({"event": "started", "id": req.get("id")})
         try:
-            text, stats = generate(req)
+            text, stats, _ = generate(req)
             spec_ids.discard(req.get("id"))
             if stats.get("cancelled"):
                 send({"id": req.get("id"), "cancelled": True})

@@ -1,6 +1,7 @@
 #!/bin/zsh
-# Builds dist/VoiceBud.app and dist/VoiceBud.dmg: VoiceBud for any Apple Silicon Mac with
-# macOS 15 or newer, without Homebrew or a Python install. The app carries its own Python
+# Builds dist/VoiceBud.app and dist/VoiceBud.dmg: VoiceBud for any Apple Silicon Mac with the
+# macOS its libraries need (read from the binaries: 26.2 with today's MLX), without Homebrew or
+# a Python install. The app carries its own Python
 # (python-build-standalone 3.12.15, the same version as the development venv, so the venv's
 # compiled packages are copied as they are). The speech models are not in the DMG; the app
 # downloads them on first start. Signed ad hoc (no Apple Developer membership): recipients
@@ -61,7 +62,7 @@ plist() {  # name, id, executable, extra keys
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
-    <key>LSMinimumSystemVersion</key><string>15.0</string>
+    <key>LSMinimumSystemVersion</key><string>$MINOS</string>
     <key>LSArchitecturePriority</key><array><string>arm64</string></array>
     <key>LSUIElement</key><true/>
 $4
@@ -70,10 +71,6 @@ $4
 PLIST
 }
 APPLE_EVENTS="    <key>NSAppleEventsUsageDescription</key><string>VoiceBud fragt Word nur nach Schrift und Größe an deinem Cursor, damit eingefügte Formeln zum Text passen.</string>"
-plist VoiceBud "$BUNDLE_ID.ui" VoiceBudUI "$APPLE_EVENTS" > "$UIAPP/Contents/Info.plist"
-plist VoiceBud "$BUNDLE_ID" VoiceBud "    <key>NSMicrophoneUsageDescription</key><string>VoiceBud hört nur zu, während du diktierst. Alles bleibt auf diesem Mac.</string>
-$APPLE_EVENTS" \
-    > "$C/Info.plist"
 
 echo "build-dmg: Starter"
 # a left-over beta SDK can be newer than the installed linker understands: prefer a release SDK
@@ -86,6 +83,21 @@ clang -O2 -arch arm64 -mmacosx-version-min=15.0 "${sysroot[@]}" \
     -Wl,-rpath,@executable_path/../Resources/python/lib \
     -o "$C/MacOS/VoiceBud" "$PKG/launcher.c"
 rm -rf "$R/python/include"
+
+echo "build-dmg: Mindest-macOS"
+# the oldest macOS VoiceBud runs on is the newest minimum any bundled binary names. MLX's macOS 26
+# wheel is built for 26.2: on an older macOS it loads, then every take fails on the GPU. Read from
+# the binaries, never typed in, so the Info.plist cannot promise a macOS the libraries refuse
+# (oscheck.py says the same at start, for launches that bypass Finder).
+MINOS=$(find "$APP" -type f \( -name '*.so' -o -name '*.dylib' -o -perm +111 \) -print0 \
+    | xargs -0 otool -l 2>/dev/null \
+    | awk '/cmd LC_BUILD_VERSION/ {b = 1} b && $1 == "platform" {mac = ($2 == 1)} b && $1 == "minos" {if (mac) print $2; b = 0}' \
+    | sort -V | tail -1)
+[[ "$MINOS" == <->.<->* ]] || { echo "build-dmg: Mindest-macOS nicht lesbar ($MINOS)" >&2; exit 1; }
+plist VoiceBud "$BUNDLE_ID.ui" VoiceBudUI "$APPLE_EVENTS" > "$UIAPP/Contents/Info.plist"
+plist VoiceBud "$BUNDLE_ID" VoiceBud "    <key>NSMicrophoneUsageDescription</key><string>VoiceBud hört nur zu, während du diktierst. Alles bleibt auf diesem Mac.</string>
+$APPLE_EVENTS" \
+    > "$C/Info.plist"
 
 echo "build-dmg: vorkompilieren"
 "$R/python/bin/python3.12" -m compileall -q -j0 "$R/app" "$R/python/lib/python3.12" >/dev/null 2>&1 || true
@@ -115,4 +127,4 @@ hdiutil detach "$MNT" >/dev/null
 hdiutil convert -quiet "$RW" -format UDZO -imagekey zlib-level=9 -o "$DIST/VoiceBud.dmg"
 rm -f "$RW"
 "$LSR" -u "$APP" >/dev/null 2>&1 || true       # never listed as an installed app on this Mac
-echo "build-dmg: $(du -sh "$APP" | cut -f1) App, $(du -sh "$DIST/VoiceBud.dmg" | cut -f1) DMG -> $DIST/VoiceBud.dmg"
+echo "build-dmg: $(du -sh "$APP" | cut -f1) App, $(du -sh "$DIST/VoiceBud.dmg" | cut -f1) DMG, ab macOS $MINOS -> $DIST/VoiceBud.dmg"

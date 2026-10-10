@@ -68,6 +68,14 @@ if let i = CoreFlags.arguments.firstIndex(of: "--render-onboarding") {
     exit(code)
 }
 
+if CoreFlags.arguments.contains("--selftest-shortcuts") {
+    let ok: Bool = MainActor.assumeIsolated {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        return HubShortcutRecorder.selfTest()
+    }
+    exit(ok ? 0 : 1)
+}
+
 if let i = CoreFlags.arguments.firstIndex(of: "--render") {
     guard i + 1 < CoreFlags.arguments.count else {
         IPC.log("usage: VoiceBudUI --render <dir>")
@@ -115,6 +123,16 @@ final class CoreAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         state = AppState()
         Loc.shared.apply(state.settings.uiLanguage)       // the app's language before the first text
+        Loc.shared.apply(ocrKey: state.settings.ocrShortcut.readable)
+        // own key shortcuts read through the keyboard layout: a new layout redraws them
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("com.apple.Carbon.TISNotifySelectedKeyboardInputSourceChanged"),
+                                                            object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let state = self?.state else { return }
+                state.layoutRevision += 1
+                Loc.shared.apply(ocrKey: state.settings.ocrShortcut.readable)
+            }
+        }
         island = IslandController(state: state)
         OnboardingBridge.install(state: state)
         OutputMute.recoverAfterCrash()
@@ -132,6 +150,7 @@ final class CoreAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !CoreFlags.headless && !CoreFlags.demo {
             ScreenText.shared = ScreenText(state: state)
             ScreenText.shared?.start()
+            HotkeyCenter.shared.start(state: state)
         }
 
         if CoreFlags.demo {

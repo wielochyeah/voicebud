@@ -346,5 +346,187 @@ class ProcessTest(unittest.TestCase):
         self.assertEqual(self.pasted[0], self.pasted[1])
 
 
+
+class HotkeyPauseTest(unittest.TestCase):
+    """The hub records a new shortcut (10.10.): the core's chords are off meanwhile and come back
+    with the new choice, also over a take that was running."""
+
+    def setUp(self):
+        ProcessTest.setUp(self)                         # the same headless VoiceBud, not its tests
+        from PyObjCTools import AppHelper
+        self._after, self._later, self._ptt = AppHelper.callAfter, AppHelper.callLater, self.main.PushToTalk
+        self.later = []
+        AppHelper.callAfter = lambda fn, *a: fn(*a)
+        AppHelper.callLater = lambda delay, fn, *a: self.later.append((delay, fn))
+        made = self.made = []
+
+        class FakePTT:
+            def __init__(self, key, on_press=None, on_release=None, mode="hold", **kw):
+                self.key, self.mode, self.live = key, mode, False
+                self.on_press_cb, self.on_release_cb = on_press, on_release
+                made.append(self)
+
+            def start(self):
+                self.live = True
+                return self
+
+            def stop(self):
+                self.live = False
+
+        self.main.PushToTalk = FakePTT
+        self.sent = []
+        self.vb.ui.send = self.sent.append
+
+    def tearDown(self):
+        from PyObjCTools import AppHelper
+        AppHelper.callAfter, AppHelper.callLater, self.main.PushToTalk = self._after, self._later, self._ptt
+        ProcessTest.tearDown(self)
+
+    def live(self):
+        return {m: p.key for m, p in self.vb.ptts.items() if p.live}
+
+    def test_pause_and_resume_with_the_new_choice(self):
+        self.vb.install_hotkeys()
+        self.assertEqual(self.live()["dictate"], "ctrl+shift")
+        self.vb._hotkeys_pause(True)
+        self.assertEqual(self.live(), {})
+        self.assertFalse(any(p.live for p in self.made))
+        self.vb.settings["shortcuts"] = {"dictate": "cmd_r"}
+        self.vb.install_hotkeys()                       # the settings change arrives during the pause
+        self.assertEqual(self.live(), {})
+        self.vb._hotkeys_pause(False)
+        self.assertEqual(self.live()["dictate"], "cmd_r")
+        self.assertEqual(self.sent[-1]["hotkeys"]["dictate"], "cmd_r")
+        self.assertEqual(self.vb.ui.hello["hotkeys"]["dictate"], "cmd_r")
+
+    def test_resume_over_a_running_take(self):
+        self.vb.install_hotkeys()
+        self.vb._hotkeys_pause(True)
+        self.vb.owner = "dictate"                       # recording when the pause ends
+        self.vb._hotkeys_pause(False)
+        self.assertIn("dictate", self.live())           # no waiting: there were no keys to keep
+        self.vb.owner = None
+
+    def test_changed_keys_wait_for_a_running_take(self):
+        self.vb.install_hotkeys()
+        self.vb.owner = "dictate"
+        self.later.clear()
+        self.vb.install_hotkeys()
+        self.assertEqual([d for d, _ in self.later], [1.0])
+        self.vb.owner = None
+
+    def test_lost_resume_ends_the_pause(self):
+        self.vb.install_hotkeys()
+        self.vb._hotkeys_pause(True)
+        delay, fn = self.later[-1]
+        self.assertEqual(delay, 30.0)
+        fn()
+        self.assertIn("dictate", self.live())
+
+    def test_key_from_the_ui(self):
+        self.vb.settings["shortcuts"] = {"dictate": {"key": 13, "mods": 4096, "label": "⌃W"}}
+        self.vb.install_hotkeys()
+        self.assertEqual(self.sent[-1]["hotkeys"]["dictate"], "label:⌃W")
+        started = []
+        self.vb.start_rec = lambda m: started.append(("start", m))
+        self.vb.stop_rec = lambda m: started.append(("stop", m))
+        self.vb.install_hotkeys()                       # the callbacks above
+        self.vb._hotkey("dictate", True)
+        self.vb._hotkey("dictate", False)
+        self.vb._hotkey("prompt", True)                 # a chord: not the UI's business
+        self.assertEqual(started, [("start", "dictate")])
+        self.vb._hotkeys_pause(True)
+        self.vb._hotkey("dictate", True)                # paused: nothing
+        self.assertEqual(started, [("start", "dictate")])
+
+    def test_text_recognition_chord(self):
+        self.vb.settings["shortcuts"] = {"ocr": "ctrl+alt+shift"}
+        self.vb.install_hotkeys()
+        self.assertEqual(self.live().get("ocr"), "ctrl+alt+shift")
+        self.vb.ptts["ocr"].on_press_cb()
+        self.assertEqual(self.sent[-1], {"type": "screen_text"})
+
+    def test_inner_chord_is_strict(self):
+        self.vb.settings["shortcuts"] = {"prompt": "ctrl+alt+shift"}
+        self.vb.install_hotkeys()
+        self.assertTrue(self.vb.ptts["dictate"].strict)            # ⌃⇧ lies inside ⌃⌥⇧
+        self.assertFalse(self.vb.ptts["prompt"].strict)
+        self.assertEqual(self.sent[-1]["standard"]["prompt"], "ctrl+alt")
+
+    def test_text_recognition_key_makes_chords_strict(self):
+        self.vb.settings["shortcuts"] = {"ocr": {"key": 17, "mods": 4096 | 2048 | 512, "label": "⌃⌥⇧T"}}
+        self.vb.install_hotkeys()
+        self.assertTrue(self.vb.ptts["dictate"].strict)            # ⌃⇧ inside ⌃⌥⇧T
+        self.assertTrue(self.vb.ptts["prompt"].strict)             # ⌃⌥ inside ⌃⌥⇧T
+        self.assertFalse(self.vb.ptts["command"].strict)
+        self.vb.settings["shortcuts"] = {"dictate": "shift_r"}     # right ⇧ inside the standard ⇧⌘2
+        self.vb.install_hotkeys()
+        self.assertTrue(self.vb.ptts["dictate"].strict)
+        self.vb.settings["screenText"] = False                     # off: no key, nothing strict
+        self.vb.install_hotkeys()
+        self.assertFalse(self.vb.ptts["dictate"].strict)
+
+    def test_only_the_recognition_key_changed_reinstalls(self):
+        calls = []
+        self.vb.install_hotkeys = lambda: calls.append(1)
+        import settings as st
+        old = st.load
+        st.load = lambda: dict(old(), shortcuts={"ocr": {"key": 17, "mods": 2304, "label": "⌥⌘T"}})
+        try:
+            self.vb.reload_settings()
+        finally:
+            st.load = old
+        self.assertEqual(calls, [1])
+
+    def test_defaults_never_strict(self):
+        self.vb.install_hotkeys()
+        self.assertFalse(any(getattr(p, "strict", False) for p in self.vb.ptts.values()))
+
+    def test_old_timer_does_not_end_a_new_pause(self):
+        self.vb.install_hotkeys()
+        self.vb._hotkeys_pause(True)
+        old = self.later[-1][1]
+        self.vb._hotkeys_pause(False)
+        self.vb._hotkeys_pause(True)
+        old()
+        self.assertEqual(self.live(), {})
+
+
+
+class StopwatchTest(unittest.TestCase):
+    """The stopwatch line (10.10.: testers on old Macs send it): new fields at the end, numbers only,
+    and a broken probe never costs the line."""
+
+    def test_machine_line(self):
+        import main
+        line = main.machine_line()
+        self.assertTrue(line.startswith("machine: "))
+        self.assertIn("GB", line)
+
+    def test_line_with_and_without_probes(self):
+        import io
+        import contextlib
+        import types
+        import main
+        vb = types.SimpleNamespace(cleaner=types.SimpleNamespace(last_stats={"tokens": 5, "prefix": 0.12, "cached": True}),
+                                   stt=types.SimpleNamespace(last_temperature=0.0, last_encoder=(1, 1)))
+        res = types.SimpleNamespace(audio_s=31.0, segments=2, partials=0, speculative=False)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            main.VoiceBud._log(vb, res, 0.0, 1.0, 2.0, 2.1, "pasted")
+            vb.stt = types.SimpleNamespace(last_temperature=0.0, last_encoder=3)        # broken probe
+            vb.cleaner.last_stats = {}
+            main.VoiceBud._log(vb, res, 0.0, 1.0, 2.0, 2.1, "pasted")
+        first, second = out.getvalue().splitlines()
+        self.assertTrue(first.endswith("| enc 1+1 reused, prefix 0.12s cached"))
+        self.assertIn("STT after stop 1.00s", first)
+        self.assertTrue(second.endswith("| enc ?"))
+        vb.stt = types.SimpleNamespace(last_temperature=0.0, last_encoder=None)         # short take: no memo
+        out2 = io.StringIO()
+        with contextlib.redirect_stdout(out2):
+            main.VoiceBud._log(vb, res, 0.0, 1.0, 2.0, 2.1, "pasted")
+        self.assertTrue(out2.getvalue().strip().endswith("| enc -"))
+
+
 if __name__ == "__main__":
     unittest.main()

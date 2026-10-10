@@ -86,6 +86,10 @@ class PushToTalk:
         self._pending_stop = False # toggle: this press will stop the take on release
         self._spoiled = False      # this press turned out to be another shortcut
         self._armed = True         # False after a spoiled press until the modifiers are let go
+        # this chord lies inside another shortcut (10.10., the hub allows ⌃⇧ next to ⌃⌥⇧K): any other
+        # modifier down with its own ones spoils the press, so letting go of the longer shortcut
+        # never completes this one late (main.install_hotkeys sets it; never for the defaults)
+        self.strict = False
         self._monitors = []
 
     def _chord_complete(self, flags):
@@ -171,6 +175,8 @@ class PushToTalk:
         extra = self._extra(flags)
         if extra and self._chord_held:
             self._spoil()
+        if self.strict and extra and flags & self.families:
+            self._armed = False
         self._update(self._chord_complete(flags) and not extra)
 
     def start(self):
@@ -178,6 +184,7 @@ class PushToTalk:
         AppKit run loop starts (events are delivered by that run loop). Key-downs
         are watched too: they tell a chord apart from a longer shortcut."""
         mask = NSEventMaskFlagsChanged | NSEventMaskKeyDown | NSEventMaskKeyUp
+        self._seed_armed()
 
         def _global(event):
             self._handle(event)
@@ -192,3 +199,115 @@ class PushToTalk:
         self._monitors.append(
             NSEvent.addLocalMonitorForEventsMatchingMask_handler_(mask, _local))
         return self
+
+    def _seed_armed(self):
+        """Installed in the middle of a press (a shortcut just changed in the hub, its keys still
+        down): wait until these keys are let go, or letting go of the others completes the chord."""
+        try:
+            import Quartz
+            if int(Quartz.CGEventSourceFlagsState(Quartz.kCGEventSourceStateHIDSystemState)) & self.families:
+                self._armed = False
+        except Exception:
+            pass
+
+    def stop(self):
+        """Remove the monitors (a changed shortcut gets a new PushToTalk). Main thread."""
+        for m in self._monitors:
+            NSEvent.removeMonitor_(m)
+        self._monitors = []
+
+
+def valid(spec):
+    """A shortcut this module can watch: known names only, and not a single left or plain
+    modifier ("cmd" alone would be every aborted ⌘ shortcut; "cmd_r" alone is fine)."""
+    if not isinstance(spec, str) or not spec.strip():
+        return False
+    names = [n.strip() for n in spec.split("+")]
+    if any(n not in MOD_MASKS and n not in KEY_CODES for n in names):
+        return False
+    if len(set(names)) != len(names):
+        return False
+    if len(names) >= 2:
+        return True
+    # one key alone: a right-side modifier (the left ones belong to every shortcut) or f13
+    return names[0].endswith("_r") or names[0] in KEY_CODES
+
+
+def valid_key(spec):
+    """A shortcut with a regular key that the UI registers with macOS (Carbon) and reports:
+    {"key": virtual key code, "mods": Carbon modifiers, "label": "⌃W"}."""
+    if not isinstance(spec, dict):
+        return False
+    def whole(v):        # 13 and 13.0 alike (the UI's JSON reader cannot tell them apart)
+        return not isinstance(v, bool) and (isinstance(v, int) or (isinstance(v, float) and v.is_integer()))
+    key, mods, label = spec.get("key"), spec.get("mods"), spec.get("label")
+    return (whole(key) and 0 <= key < 128 and whole(mods) and int(mods) & ~CARBON_MODS == 0
+            and isinstance(label, str) and 0 < len(label) <= 24)
+
+
+CARBON_MODS = 256 | 512 | 2048 | 4096      # cmdKey | shiftKey | optionKey | controlKey
+
+
+class KeyHotkey:
+    """A shortcut with a regular key (⌃W, ⌃⌥D, F5; 10.10.). macOS hands it to the UI, which owns the
+    registration (the key then never reaches the app in front) and reports every press and release;
+    this decides what they mean, like PushToTalk does for chords: toggle starts or stops on the
+    press, hold records while it is down."""
+
+    def __init__(self, spec, on_press, on_release, mode="hold", active=None, on_cancel=None, on_chord=None):
+        if not valid_key(spec):
+            raise ValueError(f"not a key shortcut: {spec!r}")
+        self.key_code = spec["key"]
+        self.mods = spec["mods"]
+        self.label = spec["label"]
+        self.mode = mode
+        self.on_press_cb = on_press
+        self.on_release_cb = on_release
+        self.on_cancel_cb = on_cancel
+        self.on_chord_cb = on_chord
+        self.active = active
+        self._down = False          # the key is down (macOS may repeat the press while held)
+        self._recording = False     # hold: this press started a take
+
+    def start(self):
+        return self                 # nothing to watch here: the UI holds the key
+
+    def stop(self):
+        self._down = False
+        self._recording = False
+
+    def held_now(self):
+        """Is the key physically down right now (missed release check)?"""
+        from Quartz import CGEventSourceKeyState, kCGEventSourceStateHIDSystemState
+        return bool(CGEventSourceKeyState(kCGEventSourceStateHIDSystemState, self.key_code))
+
+    def _chord(self):
+        if self.on_chord_cb is not None:
+            try:
+                self.on_chord_cb()
+            except Exception:
+                pass
+
+    def event(self, down):
+        """A press (down) or release reported by the UI. Main thread."""
+        if down:
+            if self._down:
+                return              # a repeat while held
+            self._down = True
+            if self.mode == "toggle":
+                running = self.active() if self.active is not None else self._recording
+                if not running:
+                    self._chord()
+                self._recording = not running
+                (self.on_release_cb if running else self.on_press_cb)()
+            else:
+                self._chord()
+                self._recording = True
+                self.on_press_cb()
+        else:
+            if not self._down:
+                return
+            self._down = False
+            if self.mode == "hold" and self._recording:
+                self._recording = False
+                self.on_release_cb()

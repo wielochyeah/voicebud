@@ -115,6 +115,65 @@ def footprint_mb(pid=None):
     return float("nan")
 
 
+class EncoderMemo:
+    """Within one transcription, an encoder input seen before gives its stored output (10.10.: M1-M4
+    run Whisper's encoder 3.5-13x slower than the M5 Pro, which has neural accelerators for it). It
+    happens twice: with automatic language and 30 s or more of speech, the language pass encodes the
+    same first window the transcription encodes again, and a temperature fallback encodes its window
+    a second time. Exact bits only (-0 and +0 count as different), so the text is the same."""
+    MAX = 4
+
+    def __init__(self):
+        self.items = []          # (input, output)
+        self.computed = 0
+        self.reused = 0
+
+    @staticmethod
+    def same(a, b):
+        import mlx.core as mx
+        if a.shape != b.shape or a.dtype != b.dtype:
+            return False
+        if a.dtype in (mx.float16, mx.bfloat16):
+            return bool(mx.array_equal(a.view(mx.uint16), b.view(mx.uint16)).item())
+        if a.dtype == mx.float32:
+            return bool(mx.array_equal(a.view(mx.uint32), b.view(mx.uint32)).item())
+        return False
+
+    def encode(self, x, compute):
+        try:
+            hit = next((out for inp, out in self.items if self.same(inp, x)), None)
+        except Exception:
+            hit = None                                   # never a guess: compute it
+        if hit is not None:
+            self.reused += 1
+            return hit
+        out = compute(x)
+        self.computed += 1
+        self.items.append((x, out))
+        del self.items[:-self.MAX]
+        return out
+
+
+_encoder_memo = None             # the memo of the transcription running now (MLX thread only)
+
+
+def _memo_encoder(model):
+    """Give the model's encoder the memo (once per loaded model; the class is swapped on the
+    instance, its weights stay as they are). Without a running transcription it encodes as always."""
+    enc = model.encoder
+    if getattr(type(enc), "_vb_memo", False):
+        return
+    base = type(enc)
+
+    def __call__(self, x):
+        memo = _encoder_memo
+        if memo is None:
+            return base.__call__(self, x)
+        return memo.encode(x, lambda y: base.__call__(self, y))
+
+    enc.__class__ = type(base.__name__ + "Memo", (base,), {"__call__": __call__, "_vb_memo": True})
+
+
 def speech_stats(audio):
     """(speech timestamps, seconds of speech) from Silero VAD."""
     if audio.size == 0:
@@ -140,6 +199,7 @@ class Transcriber:
         self.cfg = cfg
         engine = cfg.get("engine", "faster-whisper")
         self.last_load_s = 0.0
+        self.last_encoder = None     # encoder passes computed and reused in the last transcription (memo on)
         if engine == "mlx-whisper":
             import mlx_whisper  # optional GPU path
             self._mlx = mlx_whisper
@@ -193,6 +253,7 @@ class Transcriber:
         t = time.time()
         model = ModelHolder.get_model(self._mlx_repo, mx.float16)
         mx.eval(model.parameters())  # materialise now, not lazily inside the first take
+        _memo_encoder(model)
         self.last_load_s = time.time() - t
         return self.last_load_s
 
@@ -263,16 +324,29 @@ class Transcriber:
 
         language = language or self.cfg.get("language")
         if self._mlx is not None:
-            if language is None:
-                language = self.detect_language(audio, speech_s)
-            # one fallback step instead of five (0.2 ... 1.0): the fallback only fires on very hard
-            # audio, where five sampled retries took 4.6 s instead of 2.5 s for the same words
-            # (bench 04.10.: identical text everywhere else, WER 0.49 vs 0.50 at -3 dB SNR)
-            result = self._mlx.transcribe(
-                audio, path_or_hf_repo=self._mlx_repo, language=language,
-                condition_on_previous_text=False, initial_prompt=prompt or None,
-                temperature=tuple(self.cfg.get("temperatures", (0.0, 0.4))),
-            )
+            global _encoder_memo
+            import mlx.core as mx
+            from mlx_whisper.transcribe import ModelHolder
+            from mlx_whisper.audio import N_SAMPLES
+            _memo_encoder(ModelHolder.get_model(self._mlx_repo, mx.float16))
+            # only from 30 s of speech: below that the language pass and the first window never match,
+            # and the comparison would make the GPU wait on every short take (measured 10.10.: ~20 ms)
+            memo = EncoderMemo() if audio.size >= N_SAMPLES else None
+            _encoder_memo = memo
+            try:
+                if language is None:
+                    language = self.detect_language(audio, speech_s)
+                # one fallback step instead of five (0.2 ... 1.0): the fallback only fires on very hard
+                # audio, where five sampled retries took 4.6 s instead of 2.5 s for the same words
+                # (bench 04.10.: identical text everywhere else, WER 0.49 vs 0.50 at -3 dB SNR)
+                result = self._mlx.transcribe(
+                    audio, path_or_hf_repo=self._mlx_repo, language=language,
+                    condition_on_previous_text=False, initial_prompt=prompt or None,
+                    temperature=tuple(self.cfg.get("temperatures", (0.0, 0.4))),
+                )
+            finally:
+                _encoder_memo = None
+                self.last_encoder = (memo.computed, memo.reused) if memo is not None else None
             self.last_temperature = max((s.get("temperature", 0.0) for s in result.get("segments", [])),
                                         default=0.0)
             text = result.get("text", "").strip()

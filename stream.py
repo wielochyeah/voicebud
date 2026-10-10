@@ -475,9 +475,10 @@ class Take:
                 seg.future.cancel()
         lang = self.forced_lang or self.lang_final
         audio = self.buf.get(0, end)
-        # the wait grows with the take (an M1 transcribes about 4x slower than the M5 Pro's
-        # 11 ms per audio second); a fixed 120 s gave up on hour-long takes and lost them
-        timeout = timeout or max(120.0, end / SR * 0.1)
+        # the wait grows with the take; a fixed 120 s gave up on hour-long takes and lost them. 10.10.:
+        # an M1 runs Whisper's encoder up to ~13x slower than the M5 Pro's 11 ms per audio second
+        # (no neural accelerators), so 0.1 s per second could still lose a 20-min take there
+        timeout = timeout or max(120.0, end / SR * 0.5)
         if not self.streaming:
             ahead, stats = self._speculated(audio, timeout)
             if self._spec is not None and not self._spec["future"].done():

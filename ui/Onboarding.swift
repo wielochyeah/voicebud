@@ -768,6 +768,43 @@ struct OnboardingRichText: View {
 }
 
 /// HubRow with the onboarding's type scale (title 13, subtitle 12 in `prose`).
+/// Under the dictation language (10.10., Nils: the footnote alone is not read): a fixed language skips
+/// the language pass Whisper runs on every take, up to two seconds on an M1. Once one is chosen it
+/// says so instead.
+struct OnboardingSpeedHint: View {
+    let fixed: Bool
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let t = HubTheme(scheme)
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: fixed ? "checkmark.circle.fill" : "bolt.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(fixed ? t.ok : t.accent)
+                .frame(width: 18)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(fixed ? L("Feste Sprache: schneller") : L("Schneller diktieren: Sprache fest wählen"))
+                    .font(OnboardingType.body.weight(.semibold))
+                    .foregroundStyle(t.fg)
+                Text(fixed ? L("Jedes Diktat spart den Schritt, in dem VoiceBud die Sprache erkennt.")
+                     : L("Sprichst du nur Deutsch oder nur Englisch, wähl es oben fest. Automatisch erkennt bei jedem Diktat zuerst die Sprache, das kostet auf älteren Macs bis zu zwei Sekunden."))
+                    .font(OnboardingType.secondary)
+                    .foregroundStyle(t.prose)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill((fixed ? t.ok : t.accent).opacity(t.dark ? 0.16 : 0.10)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .strokeBorder((fixed ? t.ok : t.accent).opacity(0.35), lineWidth: 1))
+        .animation(.easeOut(duration: 0.2), value: fixed)
+    }
+}
+
 struct OnboardingRow<Trailing: View>: View {
     let title: String
     var subtitle: String?
@@ -1278,7 +1315,7 @@ struct OnboardingHowItWorks: View {
 
     var body: some View {
         OnboardingPage {
-            OnboardingHeader(title: L("So funktioniert’s"), subtitle: L("Drei Tastenkürzel, die in jeder App funktionieren."))
+            OnboardingHeader(title: L("So funktioniert’s"), subtitle: L("Drei Tastenkürzel, die in jeder App funktionieren. Ändern kannst du sie später im Hub."))
                 .padding(.bottom, OnboardingGap.l)
             HubCard {
                 OnboardingGestureRow(title: L("Diktieren"),
@@ -1890,7 +1927,8 @@ struct OnboardingTestDictation: View {
         let keys = HubFormat.hotkey(model.hotkeys["dictate"] ?? "ctrl+shift")
         OnboardingPage {
             OnboardingHeader(title: L("Probediktat"),
-                             subtitle: L("Drück beide Tasten, sag einen Satz und drück sie noch einmal."))
+                             subtitle: keys.count == 2 ? L("Drück beide Tasten, sag einen Satz und drück sie noch einmal.")
+                                 : L("Drück dein Tastenkürzel, sag einen Satz und drück es noch einmal."))
                 .padding(.bottom, OnboardingGap.l)
             OnboardingBigKeys(keys: keys, pressed: listening,
                               action: model.mock && !isStatic ? { model.simulateTest() } : nil)
@@ -2126,7 +2164,10 @@ struct OnboardingLanguage: View {
                 }
             }
             .frame(width: OnboardingLayout.narrow + 60)
-            OnboardingFootnote(L("Empfohlen ist Automatisch: Es erkennt Deutsch oder Englisch je Aufnahme. Beides lässt sich später im Hub unter Allgemein ändern."), lines: 2)
+            OnboardingSpeedHint(fixed: model.dictationLanguage != .auto)
+                .frame(width: OnboardingLayout.narrow + 60)
+                .padding(.top, OnboardingGap.s)
+            OnboardingFootnote(L("Automatisch erkennt Deutsch oder Englisch je Aufnahme, richtig für alle, die beides sprechen. Beides lässt sich später im Hub unter Allgemein ändern."), lines: 2)
                 .frame(width: OnboardingLayout.narrow + 60)
         }
     }

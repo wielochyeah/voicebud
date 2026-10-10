@@ -255,6 +255,8 @@ final class HubModel {
     var previewExpanded: Set<Int64> = []
     var previewHoverTerm: String?
     var previewAlcoveRunning: Bool?
+    /// renders: a shortcut row recording or complaining
+    var previewRecorder: HubShortcutRecorder?
     /// renders only: the snippets list (ImageRenderer never runs onAppear, so the pane would be empty)
     var previewSnippets: [[String: String]] = []
 
@@ -840,15 +842,18 @@ struct HubRow<Trailing: View>: View {
     var subtitle: String?
     var dot: Color?
     var icon: NSImage?
+    /// a subtitle that must be seen (a refused shortcut, 10.10.)
+    var subtitleColor: Color?
     let trailing: Trailing
     @Environment(\.colorScheme) private var scheme
 
-    init(_ title: String, subtitle: String? = nil, dot: Color? = nil, icon: NSImage? = nil,
+    init(_ title: String, subtitle: String? = nil, dot: Color? = nil, icon: NSImage? = nil, subtitleColor: Color? = nil,
          @ViewBuilder trailing: () -> Trailing) {
         self.title = title
         self.subtitle = subtitle
         self.dot = dot
         self.icon = icon
+        self.subtitleColor = subtitleColor
         self.trailing = trailing()
     }
 
@@ -862,7 +867,7 @@ struct HubRow<Trailing: View>: View {
                 if let subtitle {
                     Text(subtitle)
                         .font(.system(size: 11.5))
-                        .foregroundStyle(t.fg2)
+                        .foregroundStyle(subtitleColor ?? t.fg2)
                         .lineSpacing(1)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1945,12 +1950,451 @@ struct HubAlcovePane: View {
     }
 }
 
-struct HubGeneralPane: View {
+/// Kurzbefehle (10.10., Nils): each shortcut with its keys, "Ändern" to record a new one and a way
+/// back to the standard. The core says which shortcuts it uses for dictation, prompt and command
+/// (state.hotkeys); the text recognition's lives in the settings.
+struct HubShortcutsGroup: View {
     let model: HubModel
+    @State private var own = HubShortcutRecorder()
     @Environment(\.colorScheme) private var scheme
+
+    private var recorder: HubShortcutRecorder { model.previewRecorder ?? own }
 
     var body: some View {
         let t = HubTheme(scheme)
+        HubGroupLabel(L("Kurzbefehle"), top: 20)
+        HubCard {
+            row("dictate", L("Diktat"), dot: t.modeDot(.dictate), t: t)
+            if model.state.hotkeys["prompt"] != nil {
+                HubSeparator()
+                row("prompt", L("Prompt"), dot: t.modeDot(.prompt), t: t)
+            }
+            if model.state.hotkeys["command"] != nil {
+                HubSeparator()
+                row("command", L("Befehl"), standard: L("Text markieren, halten, sagen was passieren soll"),
+                    dot: t.modeDot(.command), t: t)
+            }
+            HubSeparator()
+            row("ocr", L("Texterkennung"),
+                standard: model.state.settings.screenText ? nil : L("Ist aus, einschalten unter Texterkennung"), t: t)
+        }
+        .onDisappear { recorder.cancel() }
+        HubFootnote(L("Diktat und Prompt: einmal drücken zum Starten, nochmal zum Beenden. Befehl: halten, sprechen, loslassen. Ein Kurzbefehl besteht aus Sondertasten allein (zwei oder mehr, oder eine rechts allein, bei Befehl zwei oder mehr) oder aus Sondertasten mit einer Taste, etwa ⌥⇧⌘D. Was macOS oder fast jede App schon nutzt, lehnt VoiceBud ab und sagt, wofür es steht."))
+    }
+
+    private func row(_ target: String, _ title: String, standard: String? = nil, dot: Color? = nil, t: HubTheme) -> some View {
+        let (text, color) = subtitle(target, standard: standard, t: t)
+        return HubRow(title, subtitle: text, dot: dot, subtitleColor: color) {
+            trailing(target, caps: HubShortcutRecorder.caps(target, model: model), t: t)
+        }
+    }
+
+    /// what the row says while it records, why the last try was refused, or the note of the new one
+    private func subtitle(_ target: String, standard: String?, t: HubTheme) -> (String?, Color?) {
+        let problem = recorder.problem?.target == target ? recorder.problem : nil
+        if recorder.target == target {
+            if let problem { return (problem.text + "\n" + L("Andere Kombination drücken, Esc bricht ab"), t.strike) }
+            if !recorder.live.isEmpty {
+                return (L("Loslassen speichert nur die Sondertasten, eine weitere Taste macht eine Kombination."), nil)
+            }
+            return (L("Drück die neue Kombination: eine Taste mit bis zu vier Sondertasten (⌃ ⌥ ⇧ ⌘), oder nur Sondertasten. Esc bricht ab."), nil)
+        }
+        if let problem { return (problem.text, t.strike) }
+        if let note = recorder.note, note.target == target { return (note.text, nil) }
+        return (standard, nil)
+    }
+
+    @ViewBuilder
+    private func trailing(_ target: String, caps: [String], t: HubTheme) -> some View {
+        HStack(spacing: 6) {
+            if recorder.target == target {
+                if !recorder.live.isEmpty {
+                    HubKeyCaps(keys: recorder.live)
+                        .padding(3)
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(t.accent, lineWidth: 1))
+                } else if let problem = recorder.problem, problem.target == target, !problem.keys.isEmpty {
+                    HubKeyCaps(keys: problem.keys)          // what was pressed, refused
+                        .padding(3)
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(t.strike, lineWidth: 1))
+                } else {
+                    Text(L("Tasten drücken …"))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(t.accent)
+                        .padding(.horizontal, 8)
+                        .frame(height: 22)
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(t.accent, lineWidth: 1))
+                }
+                if let problem = recorder.problem, problem.target == target, let free = problem.suggestion {
+                    HubChip(title: L("%@ übernehmen", free.label), haptic: true) { recorder.use(free) }
+                }
+                HubChip(title: L("Abbrechen")) { recorder.cancel() }
+            } else {
+                HubKeyCaps(keys: caps)
+                if recorder.canUndo(target) && recorder.target == nil {
+                    HubChip(title: L("Rückgängig")) { recorder.undoLast() }
+                }
+                if model.state.settings.shortcuts[target] != nil && recorder.target == nil {
+                    HubChip(title: L("Standard")) { reset(target) }
+                        .help(L("Zurück zum Standard-Kurzbefehl"))
+                }
+                HubChip(title: L("Ändern"), haptic: true) { recorder.start(target, model: model) }
+            }
+        }
+        .fixedSize()                                   // the reason beside it wraps instead
+    }
+
+    private func reset(_ target: String) {
+        recorder.restore(target, to: nil, model: model)
+    }
+}
+
+/// Records a new shortcut in the hub (10.10., Nils). Modifiers alone are taken when all are let go
+/// (the most that was held), a key with modifiers when the key goes down; ShortcutRules decides,
+/// and a refusal stays on screen with its reason while the row keeps recording. Meanwhile the core's
+/// chords and every registered key are paused, so the keys pressed here start nothing.
+@MainActor @Observable
+final class HubShortcutRecorder {
+    struct Problem: Equatable { let target: String; let text: String; var keys: [String] = []; var suggestion: KeyCombo? }
+    /// "dictate" | "prompt" | "command" | "ocr" while recording
+    private(set) var target: String?
+    /// the keys held right now
+    private(set) var live: [String] = []
+    /// why the last try was refused (under its row until the next try)
+    private(set) var problem: Problem?
+    /// what the accepted shortcut does elsewhere (a note, kept until the next change)
+    private(set) var note: Problem?
+    @ObservationIgnored private var monitor: Any?
+    @ObservationIgnored private var resign: NSObjectProtocol?
+    @ObservationIgnored private var peak: UInt = 0
+    /// a key went down during this hold: the modifiers' release is not a chord of its own
+    @ObservationIgnored private var keyUsed = false
+    @ObservationIgnored private var timeout: DispatchWorkItem?
+    @ObservationIgnored private weak var model: HubModel?
+    /// macOS's own shortcuts, read when the recording starts
+    @ObservationIgnored private var system: [ShortcutRules.SystemEntry] = []
+    /// regular keys down now: a second one is two keys at once, a release without its press was
+    /// taken by macOS or another app before VoiceBud saw it
+    @ObservationIgnored private var keysDown: Set<UInt16> = []
+    /// 🌐/fn down, and alone so far
+    @ObservationIgnored private var fnDown = false
+    @ObservationIgnored private var fnAlone = false
+    /// the shortcut before the last change that came with a note ("Rückgängig")
+    private var undo: (target: String, previous: Shortcut?)?
+
+    /// device-dependent modifier bits (NX_DEVICE…KEYMASK): family, right-hand side
+    private static let sides: [(bit: UInt, family: String, right: Bool)] = [
+        (0x1, "ctrl", false), (0x2000, "ctrl", true), (0x20, "alt", false), (0x40, "alt", true),
+        (0x2, "shift", false), (0x4, "shift", true), (0x8, "cmd", false), (0x10, "cmd", true),
+    ]
+    private static let deviceMask: UInt = 0x1 | 0x2000 | 0x20 | 0x40 | 0x2 | 0x4 | 0x8 | 0x10
+    private static let families = ["ctrl", "alt", "shift", "cmd"]   // macOS order ⌃⌥⇧⌘
+
+    func start(_ target: String, model: HubModel) {
+        cancel()
+        problem = nil
+        if note?.target == target { note = nil }
+        guard !model.isPreview else { return }
+        if model.state.phase == .recording || model.state.phase == .processing {
+            problem = Problem(target: target, text: L("Erst die laufende Aufnahme beenden"))
+            return
+        }
+        self.target = target
+        self.model = model
+        peak = 0
+        keyUsed = false
+        keysDown = []
+        fnDown = false
+        fnAlone = false
+        live = []
+        system = ShortcutRules.systemShortcuts()
+        HotkeyCenter.shared.pause(true)
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp]) { [weak self] event in
+            MainActor.assumeIsolated { self?.handle(event) }
+            return nil                                       // the keys pressed here type nothing
+        }
+        resign = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification,
+                                                        object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.lostFocus() }
+        }
+        armTimeout()
+    }
+
+    /// 25 s without a try ends the recording; the core's pause (which ends by itself after 30 s) is
+    /// renewed with every try, so a long session never lets its chords back in
+    private func armTimeout() {
+        IPC.send(["type": "hotkeys_pause", "on": true])
+        timeout?.cancel()
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.cancel() } }
+        timeout = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 25, execute: work)
+    }
+
+    func cancel() {
+        if target != nil, problem?.target == target { problem = nil }
+        stop()
+    }
+
+    /// renders only: a row as it looks while recording or after a refused try
+    func preview(target: String?, live: [String] = [], problem: Problem? = nil, note: Problem? = nil) {
+        self.target = target
+        self.live = live
+        self.problem = problem
+        self.note = note
+        if let note { undo = (note.target, nil) }
+    }
+
+    /// VoiceBud went to the background while recording: most likely macOS used the keys (⌘⇥, ⌘Leertaste)
+    private func lostFocus() {
+        guard let target else { return }
+        let held = live
+        stop()
+        problem = Problem(target: target, text: L("VoiceBud ist in den Hintergrund gerückt. Hat macOS die Kombination selbst genutzt (etwa ⌘⇥ oder ⌘Leertaste), ist sie schon belegt. Klick auf Ändern für einen neuen Versuch."),
+                          keys: held)
+    }
+
+    /// self-test only: records without pausing anything
+    func testBegin(_ target: String, model: HubModel, system: [ShortcutRules.SystemEntry]? = nil) {
+        self.target = target
+        self.model = model
+        peak = 0
+        keyUsed = false
+        keysDown = []
+        fnDown = false
+        fnAlone = false
+        problem = nil
+        note = nil
+        self.system = system ?? ShortcutRules.systemShortcuts()
+    }
+
+    /// the free variant offered with a refusal
+    func use(_ combo: KeyCombo) {
+        guard target != nil else { return }
+        apply(.take(.key(combo), note: nil), keys: HubFormat.keyCaps(combo.label))
+    }
+
+    func canUndo(_ target: String) -> Bool { undo?.target == target && note?.target == target }
+
+    func undoLast() {
+        guard let undo, let model else { return }
+        restore(undo.target, to: undo.previous, model: model)
+    }
+
+    /// "Standard" (nil) or "Rückgängig" (the previous own choice): checked like a new shortcut against
+    /// the others, and not while a take runs (its keys must keep working until it ends)
+    func restore(_ target: String, to value: Shortcut?, model: HubModel) {
+        self.model = model
+        if model.state.phase == .recording || model.state.phase == .processing {
+            problem = Problem(target: target, text: L("Erst die laufende Aufnahme beenden"))
+            return
+        }
+        let standard: Shortcut? = target == "ocr" ? .key(.ocrStandard)
+            : model.state.hotkeyStandard[target].map { $0.hasPrefix("label:") ? nil : Shortcut.chord($0) } ?? nil
+        if let wanted = value ?? standard,
+           let why = ShortcutRules.clash(wanted, target: target, others: Self.current(model)) {
+            problem = Problem(target: target, text: why)
+            return
+        }
+        model.update { $0.shortcuts[target] = value }
+        problem = nil                 // an old complaint may have been about the shortcut just changed
+        if note?.target == target { note = nil }
+        if undo?.target == target { undo = nil }
+    }
+
+    private func stop() {
+        guard target != nil else { return }
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        if let resign { NotificationCenter.default.removeObserver(resign) }
+        monitor = nil
+        resign = nil
+        timeout?.cancel()
+        timeout = nil
+        target = nil
+        live = []
+        // after the settings: the core reinstalls from what they say now, the keys register again
+        IPC.send(["type": "hotkeys_pause", "on": false])
+        HotkeyCenter.shared.pause(false)
+    }
+
+    func handle(_ event: NSEvent) {
+        guard target != nil else { return }
+        switch event.type {
+        case .flagsChanged where event.keyCode == 63:          // 🌐/fn
+            if event.modifierFlags.contains(.function) {
+                fnDown = true
+                fnAlone = keysDown.isEmpty && event.modifierFlags.rawValue & Self.deviceMask == 0
+            } else {
+                fnDown = false
+                if fnAlone, let target {
+                    let text = target == "command" ? L("Die 🌐-Taste kann VoiceBud noch nicht als Kurzbefehl nutzen. Nimm zwei Sondertasten.")
+                        : L("Die 🌐-Taste kann VoiceBud noch nicht als Kurzbefehl nutzen. Nimm ⌘ rechts oder zwei Sondertasten.")
+                    problem = Problem(target: target, text: text, keys: ["🌐"])
+                    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                    armTimeout()
+                }
+                fnAlone = false
+            }
+        case .flagsChanged:
+            fnAlone = false
+            let bits = event.modifierFlags.rawValue & Self.deviceMask
+            if bits != 0 {
+                // the set held together at its fullest (⌃, ⌃⇧, ⌃, ⌃⌥ is ⌃⌥, not all three)
+                if !keyUsed, bits & ~peak != 0 { peak = bits }
+                live = HubFormat.hotkey(Self.spec(bits))
+            } else {
+                let held = peak
+                live = []
+                peak = 0
+                if held != 0 && !keyUsed { judge(chord: Self.spec(held)) }
+                keyUsed = false
+            }
+        case .keyDown:
+            if event.isARepeat { return }
+            let mods = Self.carbon(event.modifierFlags)
+            let code = event.keyCode
+            if code == 53 && mods == 0 { cancel(); return }    // Esc
+            keyUsed = true
+            fnAlone = false
+            if let other = keysDown.first, let target {
+                // [1] two regular keys at once: macOS reports only one key with modifiers
+                keysDown.insert(code)
+                refuse(target, L("%@ und %@ sind zwei normale Tasten auf einmal. Das kann macOS nicht als Kurzbefehl melden. Möglich ist eine Taste mit bis zu vier Sondertasten (⌃ ⌥ ⇧ ⌘), oder nur Sondertasten.",
+                                 ShortcutRules.keyName(other) ?? "?", ShortcutRules.keyName(code) ?? "?"),
+                       keys: [ShortcutRules.keyName(other) ?? "?", ShortcutRules.keyName(code) ?? "?"])
+                return
+            }
+            keysDown.insert(code)
+            if fnDown, !ShortcutRules.functionKeys.contains(code), !ShortcutRules.editingKeys.contains(code), let target {
+                // [3] 🌐 with another key: macOS keeps those for itself (🌐F full screen, 🌐Q Quick Note)
+                refuse(target, L("Die 🌐-Taste kann macOS zusammen mit einer anderen Taste nicht an VoiceBud melden. Solche Kombinationen nutzt macOS selbst, etwa 🌐F für Vollbild oder 🌐Q für die Schnellnotiz. Lass 🌐 weg."),
+                       keys: ["🌐", ShortcutRules.keyName(code) ?? "?"])
+                return
+            }
+            judge(code: code, mods: mods)
+        case .keyUp:
+            if keysDown.remove(event.keyCode) == nil, let target {
+                // [28] its press never came: macOS or another app took the keys first
+                let keys = ShortcutRules.label(event.keyCode, Self.carbon(event.modifierFlags))
+                refuse(target, L("macOS oder eine andere App hat %@ abgefangen, bevor VoiceBud die Tasten sehen konnte (etwa ⌘Leertaste für Spotlight oder ⇧⌘4 für Bildschirmfotos). Diese Kombination ist schon belegt, nimm eine andere.", keys),
+                       keys: HubFormat.keyCaps(keys))
+            }
+        default:
+            break
+        }
+    }
+
+    private func refuse(_ target: String, _ text: String, keys: [String]) {
+        problem = Problem(target: target, text: text, keys: keys)
+        live = []
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        armTimeout()
+    }
+
+    static func carbon(_ f: NSEvent.ModifierFlags) -> UInt32 {
+        (f.contains(.control) ? 4096 : 0) | (f.contains(.option) ? 2048 : 0) | (f.contains(.shift) ? 512 : 0) | (f.contains(.command) ? 256 : 0)
+    }
+
+    /// "ctrl+shift" for the held bits (one right-hand key alone: "cmd_r")
+    static func spec(_ bits: UInt) -> String {
+        let held = families.filter { f in sides.contains { $0.family == f && bits & $0.bit != 0 } }
+        if held.count == 1, let f = held.first,
+           !sides.contains(where: { $0.family == f && !$0.right && bits & $0.bit != 0 }) {
+            return f + "_r"
+        }
+        return held.joined(separator: "+")
+    }
+
+    /// every mode's shortcut as it is now: the own choice, else what the core reports
+    static func current(_ model: HubModel) -> [String: Shortcut] {
+        var all: [String: Shortcut] = [:]
+        // only the modes the core has (no prompt in config.yaml: no row and nothing in the way); a mode
+        // without an own choice is its config.yaml standard, which is what the core gives it (the core's
+        // report can be stale while a row records, it pauses then)
+        for mode in ["dictate", "prompt", "command"] where model.state.hotkeys[mode] != nil {
+            if let own = model.state.settings.shortcuts[mode] {
+                all[mode] = own
+            } else if let spec = model.state.hotkeyStandard[mode] ?? model.state.hotkeys[mode], !spec.hasPrefix("label:") {
+                all[mode] = .chord(spec)
+            }
+        }
+        all["ocr"] = model.state.settings.ocrShortcut
+        return all
+    }
+
+    static func caps(_ target: String, model: HubModel) -> [String] {
+        _ = model.state.layoutRevision                    // redraw when the keyboard layout changes
+        let own = target == "ocr" ? model.state.settings.ocrShortcut : model.state.settings.shortcuts[target]
+        if case .key(let k)? = own { return HubFormat.keyCaps(k.display) }
+        if let own { return HubFormat.hotkey(own.spec) }
+        let standard = ["dictate": "ctrl+shift", "prompt": "ctrl+alt", "command": "ctrl+cmd"]
+        return HubFormat.hotkey(model.state.hotkeyStandard[target] ?? model.state.hotkeys[target] ?? standard[target] ?? "")
+    }
+
+    private func judge(chord spec: String) {
+        guard let target, let model, !spec.isEmpty else { return }
+        apply(ShortcutRules.judgeChord(spec, target: target, others: Self.current(model)), keys: HubFormat.hotkey(spec))
+    }
+
+    private func judge(code: UInt16, mods: UInt32) {
+        guard let target, let model else { return }
+        let keys = HubFormat.keyCaps(ShortcutRules.label(code, mods))
+        let others = Self.current(model)
+        let verdict = ShortcutRules.judgeKey(code: code, mods: mods, target: target, others: others, system: system)
+        apply(verdict, keys: keys)
+        if case .refuse = verdict, var p = problem, p.target == target {
+            p.suggestion = ShortcutRules.suggestion(code: code, target: target, others: others, system: system)
+            problem = p
+        }
+    }
+
+    private func apply(_ verdict: ShortcutRules.Verdict, keys: [String]) {
+        guard let target, let model else { return }
+        switch verdict {
+        case .refuse(let text):
+            problem = Problem(target: target, text: text, keys: keys)
+            live = []
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+            armTimeout()
+        case .take(let shortcut, let text):
+            let before = model.state.settings.shortcuts[target]
+            let standard = target == "ocr" && shortcut == .key(.ocrStandard)
+            let unchanged = Self.current(model)[target] == shortcut
+            if !unchanged { model.update { $0.shortcuts[target] = standard ? nil : shortcut } }
+            problem = nil
+            note = text.map { Problem(target: target, text: $0) }
+            undo = text != nil && !unchanged ? (target, before) : nil
+            stop()                                            // registers a new key
+            if !unchanged, case .key(let combo) = shortcut {
+                let center = HotkeyCenter.shared
+                var why: String?
+                // the recognition while it is switched off is not registered: ask macOS anyway
+                let status = target == "ocr" && !model.state.settings.screenText ? center.probe(combo) : center.failed[target]
+                if status == -9878 && !model.state.settings.screenText {
+                    why = L("Eine andere App hält %@ schon fest, etwa Raycast, Alfred oder ein Fenster-Tool. VoiceBud bekäme die Tasten nicht. Gib die Kombination dort frei oder nimm eine andere.", combo.label)
+                } else if let status {
+                    let os = ProcessInfo.processInfo.operatingSystemVersion
+                    why = status == -9868
+                        ? L("macOS %@ lässt Kurzbefehle nur mit ⌥ oder ⌥⇧ nicht zu, ab macOS 15.2 geht es wieder. Nimm ⌃ oder ⌘ dazu oder aktualisiere macOS.", "\(os.majorVersion).\(os.minorVersion)")
+                        : L("macOS nimmt %@ nicht als Kurzbefehl an (Fehler %d). Nimm eine andere Kombination.", combo.label, Int(status))
+                } else if center.heldElsewhere.contains(target) {
+                    why = L("Eine andere App hält %@ schon fest, etwa Raycast, Alfred oder ein Fenster-Tool. VoiceBud bekäme die Tasten nicht. Gib die Kombination dort frei oder nimm eine andere.", combo.label)
+                }
+                if let why {
+                    model.update { $0.shortcuts[target] = before }
+                    note = nil
+                    undo = nil
+                    problem = Problem(target: target, text: why, keys: keys)
+                    return
+                }
+            }
+            NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
+        }
+    }
+}
+
+struct HubGeneralPane: View {
+    let model: HubModel
+
+    var body: some View {
         VStack(spacing: 0) {
             HubPaneHeader(pane: .allgemein)
             HubSettingsColumn {
@@ -1963,7 +2407,7 @@ struct HubGeneralPane: View {
                                      select: { v in model.update { $0.uiLanguage = v } })
                     }
                     HubSeparator()
-                    HubRow(L("Diktat"), subtitle: L("Automatisch erkennt Deutsch oder Englisch je Aufnahme")) {
+                    HubRow(L("Diktat"), subtitle: L("Automatisch erkennt Deutsch oder Englisch je Aufnahme. Fest gewählt geht es schneller, auf älteren Macs bis zu zwei Sekunden pro Diktat.")) {
                         HubSegmented(options: [(DictationLanguage.auto, L("Automatisch")), (.de, L("Deutsch")), (.en, L("Englisch"))],
                                      selection: model.state.settings.dictationLanguage,
                                      select: { v in model.update { $0.dictationLanguage = v } })
@@ -2015,23 +2459,7 @@ struct HubGeneralPane: View {
                         HubSwitch(isOn: model.binding(\.keepModelsLoaded))
                     }
                 }
-                HubGroupLabel(L("Kurzbefehle"), top: 20)
-                HubCard {
-                    HubRow(L("Diktat"), dot: t.modeDot(.dictate)) {
-                        HubKeyCaps(keys: HubFormat.hotkey(model.state.hotkeys["dictate"] ?? "ctrl+shift"))
-                    }
-                    HubSeparator()
-                    HubRow(L("Prompt"), dot: t.modeDot(.prompt)) {
-                        HubKeyCaps(keys: HubFormat.hotkey(model.state.hotkeys["prompt"] ?? "ctrl+alt"))
-                    }
-                    if let command = model.state.hotkeys["command"] {
-                        HubSeparator()
-                        HubRow(L("Befehl"), subtitle: L("Text markieren, halten, sagen was passieren soll"), dot: t.modeDot(.command)) {
-                            HubKeyCaps(keys: HubFormat.hotkey(command))
-                        }
-                    }
-                }
-                HubFootnote(L("Diktat und Prompt: einmal drücken zum Starten, nochmal zum Beenden. Befehl: halten, sprechen, loslassen. Die Tasten legst du in config.yaml fest."))
+                HubShortcutsGroup(model: model)
             }
         }
     }
@@ -2676,18 +3104,32 @@ enum HubFormat {
 
     /// "ctrl+shift" -> ["⌃", "⇧"]; plain names and _l/_r variants as in config.yaml.
     static func hotkey(_ spec: String) -> [String] {
-        spec.split(separator: "+").map { part in
+        if spec.hasPrefix("label:") { return keyCaps(String(spec.dropFirst(6))) }
+        return spec.split(separator: "+").map { part in
             let k = part.trimmingCharacters(in: .whitespaces).lowercased()
             let base = k.hasSuffix("_l") || k.hasSuffix("_r") ? String(k.dropLast(2)) : k
+            let side = k.hasSuffix("_r") ? " " + L("rechts") : ""     // one right-hand key alone (10.10.)
             switch base {
-            case "ctrl", "control": return "⌃"
-            case "shift": return "⇧"
-            case "alt", "option", "opt": return "⌥"
-            case "cmd", "command": return "⌘"
+            case "ctrl", "control": return "⌃" + side
+            case "shift": return "⇧" + side
+            case "alt", "option", "opt": return "⌥" + side
+            case "cmd", "command": return "⌘" + side
             case "fn": return "fn"
-            default: return base.capitalized
+            default: return base.uppercased()
             }
         }
+    }
+
+    /// the caps of a key shortcut's label: each modifier on its own, then the key ("⌃⌥D" → ⌃ ⌥ D)
+    static func keyCaps(_ label: String) -> [String] {
+        var caps: [String] = []
+        var rest = Substring(label)
+        while let c = rest.first, "⌃⌥⇧⌘".contains(c) {
+            caps.append(String(c))
+            rest = rest.dropFirst()
+        }
+        if !rest.isEmpty { caps.append(String(rest)) }
+        return caps
     }
 }
 

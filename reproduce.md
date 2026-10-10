@@ -80,7 +80,7 @@ Click into any text field (Notes, browser, Slack, anywhere):
 
 ## Customize (edit `config.yaml`, then restart)
 
-- **Hotkey**: `hotkey.key` (e.g. `alt_r`, `ctrl+alt`) — `fn` is not possible on macOS
+- **Hotkey**: `hotkey.key` (e.g. `alt_r`, `ctrl+alt`) — `fn` is not possible on macOS. These are the defaults: a shortcut changed in the hub (General, Keyboard Shortcuts) is stored in `settings.json` under `shortcuts` (a chord as a string like `"ctrl+alt"`, a key as `{"key", "mods", "label"}` with the macOS key code and Carbon modifiers) and wins, without a restart
 - **Hold vs toggle**: `hotkey.mode: hold | toggle`
 - **LLM**: `llm.model` — another mlx-community repo works too (download it once, restart); the formula reader needs a Qwen3.5 checkpoint with its vision part
 - **Accuracy vs speed**: `stt.model: tiny.en | base | small | medium | large-v3`

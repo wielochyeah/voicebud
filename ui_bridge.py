@@ -35,12 +35,15 @@ def log(msg):
 
 class UIBridge:
     def __init__(self, hello, on_quit=None, on_settings_changed=None, path=None, env=None, on_probe=None,
-                 on_onboarding=None, on_lost=None, on_slow_hint=None, on_ocr_result=None, on_formula=None):
+                 on_onboarding=None, on_lost=None, on_slow_hint=None, on_ocr_result=None, on_formula=None,
+                 on_hotkeys_pause=None, on_hotkey=None):
         self.hello = dict(hello, type="hello")
         self.on_lost = on_lost or (lambda: None)   # the UI died: undo what only it would undo
         self.on_slow_hint = on_slow_hint or (lambda: None)   # the island offers to cancel a slow take
         self.on_ocr_result = on_ocr_result or (lambda msg: None)  # Texterkennung: a text for the history
         self.on_formula = on_formula or (lambda msg: None)  # Texterkennung with ⌥: warm or read a formula
+        self.on_hotkeys_pause = on_hotkeys_pause or (lambda on: None)  # the hub records a new shortcut
+        self.on_hotkey = on_hotkey or (lambda mode, down: None)   # a key shortcut the UI holds for us
         self.on_quit = on_quit or (lambda: None)
         self.on_settings_changed = on_settings_changed or (lambda: None)
         self.on_probe = on_probe or (lambda: None)
@@ -207,6 +210,10 @@ class UIBridge:
                 self._call(lambda m=msg: self.on_ocr_result(m))
             elif kind in ("formula", "formula_warm"):
                 self._call(lambda m=msg: self.on_formula(m))
+            elif kind == "hotkey":
+                self._call(lambda m=msg: self.on_hotkey(str(m.get("mode")), bool(m.get("down"))))
+            elif kind == "hotkeys_pause":
+                self._call(lambda m=msg: self.on_hotkeys_pause(bool(m.get("on"))))
             elif kind == "onboarding":
                 self._call(lambda m=msg: self.on_onboarding(m))
             elif kind == "quit":

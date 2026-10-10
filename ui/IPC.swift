@@ -178,8 +178,25 @@ enum IPC {
         switch type {
         case "hello":
             if let keys = msg["hotkeys"] as? [String: Any] {
-                for (k, v) in keys { if let s = v as? String { state.hotkeys[k] = s } }
+                state.hotkeys = keys.compactMapValues { $0 as? String }   // the core's whole set (no prompt: none)
             }
+            if let standard = msg["hotkey_standard"] as? [String: Any] {
+                state.hotkeyStandard = standard.compactMapValues { $0 as? String }
+            }
+            if ScreenText.shared != nil { HotkeyCenter.shared.apply() }
+        case "screen_text":
+            // the text recognition's shortcut is a chord the core watches (10.10.)
+            if state.settings.screenText { ScreenText.shared?.pressed() }
+        case "hotkeys":
+            // the core installed changed shortcuts (hub, 10.10.): the whole set, as it watches them
+            if let keys = msg["hotkeys"] as? [String: Any] {
+                state.hotkeys = keys.compactMapValues { $0 as? String }
+                OnboardingBridge.hotkeysChanged(state.hotkeys)
+            }
+            if let standard = msg["standard"] as? [String: Any] {
+                state.hotkeyStandard = standard.compactMapValues { $0 as? String }
+            }
+            if ScreenText.shared != nil { HotkeyCenter.shared.apply() }
         case "state":
             applyState(msg, to: state)
             OnboardingBridge.take(state)
@@ -307,10 +324,11 @@ extension AppState {
     func commitSettings() {
         IPC.onMain { [self] in
             Loc.shared.apply(settings.uiLanguage)
+            Loc.shared.apply(ocrKey: settings.ocrShortcut.readable)
             settings.save()
             IPC.send(["type": "settings_changed"])
             IPC.island?.settingsDidChange()
-            ScreenText.shared?.settingsDidChange()
+            if ScreenText.shared != nil { HotkeyCenter.shared.apply() }
             MenuBarIcon.shared?.update()
         }
     }

@@ -46,6 +46,9 @@ enum OnboardingRenderer {
             Shot(file: "\(number(.welcome))b-willkommen-aufnahme-light", label: label(.welcome, "Insel nimmt auf"), step: .welcome) {
                 $0.stillHero = .recording
             },
+            Shot(file: "\(number(.language))b-sprache-fest-light", label: label(.language, "feste Sprache"), step: .language) {
+                $0.dictationLanguage = .de
+            },
             Shot(file: "\(number(.microphone))b-mikrofon-wartet-light", label: label(.microphone, "Dialog offen"), step: .microphone) {
                 $0.grants[.microphone] = .requested
             },

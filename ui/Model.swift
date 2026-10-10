@@ -77,6 +77,10 @@ final class AppState {
     /// Texterkennung: ⌥ was tapped while choosing, the region is read with its formulas (05.10.)
     var ocrFormula = false
     var hotkeys: [String: String] = ["dictate": "ctrl+shift", "prompt": "ctrl+alt"]
+    /// config.yaml's shortcuts (what "Standard" in the hub goes back to), from the core
+    var hotkeyStandard: [String: String] = ["dictate": "ctrl+shift", "prompt": "ctrl+alt", "command": "ctrl+cmd"]
+    /// counts keyboard layout changes (key names of own shortcuts are read through the layout)
+    var layoutRevision = 0
     /// bumped on every `history_changed` message so views can reload
     var historyVersion: Int = 0
     var settings: UISettings = .load()
@@ -120,11 +124,18 @@ struct UISettings: Codable, Equatable {
     /// the setting keeps German texts
     var uiLanguage: UILanguage = .system
     var dictationLanguage: DictationLanguage = .auto
+    /// own shortcuts from the hub (10.10.): "dictate" | "prompt" | "command" | "ocr" -> a chord the core
+    /// watches or a key registered here (missing: config.yaml's, and ⇧⌘2 for the text recognition)
+    var shortcuts: [String: Shortcut] = [:]
+
+    /// the text recognition's shortcut as it is now
+    var ocrShortcut: Shortcut { shortcuts["ocr"] ?? .key(.ocrStandard) }
 
     enum CodingKeys: String, CodingKey {
         case islandStyle, waveStyle, waveLive, alcove, confirmSeconds, sounds, hideInFullscreen, screenText, screenTextHistory,
              keepModelsLoaded, liveText, confirmHoverExpand, contextLevel, contextApps, formulaApps, wordFontFromCursor, contextElectron,
-             onboardingDone, muteWhileRecording, muteExceptions, menuBarStyle, uiLanguage, dictationLanguage
+             onboardingDone, muteWhileRecording, muteExceptions, menuBarStyle, uiLanguage, dictationLanguage,
+             shortcuts, ocrHotkey
     }
 
     init() {}
@@ -160,6 +171,12 @@ struct UISettings: Codable, Equatable {
         uiLanguage = (try? c.decodeIfPresent(UILanguage.self, forKey: .uiLanguage)) ?? (onboardingDone ? .de : d.uiLanguage)
         dictationLanguage = (try? c.decodeIfPresent(DictationLanguage.self, forKey: .dictationLanguage))
             ?? (onboardingDone ? .auto : d.dictationLanguage)
+        shortcuts = ((try? c.decodeIfPresent([String: LossyShortcut].self, forKey: .shortcuts)) ?? [:])
+            .compactMapValues { $0.value }
+        // the first version kept the recognition's key apart (10.10., never shipped)
+        if shortcuts["ocr"] == nil, let old = try? c.decodeIfPresent(KeyCombo.self, forKey: .ocrHotkey), old != .ocrStandard {
+            shortcuts["ocr"] = .key(old)
+        }
     }
 
     /// Writes only the SPEC §0 vocabulary: "insel" | "kapsel" plus `liveText`.
@@ -188,6 +205,7 @@ struct UISettings: Codable, Equatable {
         try c.encode(menuBarStyle, forKey: .menuBarStyle)
         try c.encode(uiLanguage, forKey: .uiLanguage)
         try c.encode(dictationLanguage, forKey: .dictationLanguage)
+        try c.encode(shortcuts, forKey: .shortcuts)
     }
 
     static func load() -> UISettings {
@@ -203,6 +221,7 @@ struct UISettings: Codable, Equatable {
         if let own = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(self)) as? [String: Any] {
             merged.merge(own) { _, new in new }
         }
+        merged.removeValue(forKey: "ocrHotkey")        // the first shape of the recognition's key, read into `shortcuts`
         if let data = try? JSONSerialization.data(withJSONObject: merged, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: Paths.settings, options: .atomic)
         }
@@ -268,9 +287,104 @@ enum AlcoveProbe {
     }
 }
 
+/// a key with modifiers that VoiceBud registers with macOS: Carbon key code and modifiers, and how
+/// it reads ("⌃⌥D")
+struct KeyCombo: Codable, Equatable, Hashable {
+    var key: UInt32
+    var mods: UInt32
+    var label: String
+    static let ocrStandard = KeyCombo(key: 19, mods: 256 | 512, label: "⇧⌘2")   // kVK_ANSI_2, cmdKey | shiftKey
+
+    /// how it reads now: through the keyboard layout and language in use (the stored label was written
+    /// when it was recorded); main thread
+    var display: String {
+        guard Thread.isMainThread, let code = UInt16(exactly: key) else { return label }
+        return MainActor.assumeIsolated { ShortcutRules.keyName(code).map { ShortcutRules.glyphs(mods) + $0 } } ?? label
+    }
+
+    /// the modifiers as the core's chord names
+    var families: Set<String> {
+        var f: Set<String> = []
+        if mods & 4096 != 0 { f.insert("ctrl") }
+        if mods & 2048 != 0 { f.insert("alt") }
+        if mods & 512 != 0 { f.insert("shift") }
+        if mods & 256 != 0 { f.insert("cmd") }
+        return f
+    }
+}
+
+/// one entry of "shortcuts" read on its own, and only if the core would take it too (hotkey.valid,
+/// hotkey.valid_key): a hand edit gone wrong costs that entry, not all of them
+struct LossyShortcut: Decodable {
+    let value: Shortcut?
+    private static let names: Set<String> = ["ctrl", "ctrl_l", "ctrl_r", "shift", "shift_l", "shift_r",
+                                             "cmd", "cmd_l", "cmd_r", "alt", "alt_l", "alt_r", "f13"]
+
+    init(from decoder: Decoder) throws {
+        switch try? Shortcut(from: decoder) {
+        case .chord(let spec)?:
+            let parts = spec.lowercased().split(separator: "+", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            let ok = !parts.isEmpty && Set(parts).count == parts.count && parts.allSatisfy(Self.names.contains)
+                && (parts.count >= 2 || parts[0].hasSuffix("_r") || parts[0] == "f13")
+            value = ok ? .chord(parts.joined(separator: "+")) : nil
+        case .key(let k)?:
+            let ok = k.key < 128 && k.mods & ~UInt32(256 | 512 | 2048 | 4096) == 0 && (1...24).contains(k.label.unicodeScalars.count)
+            value = ok ? .key(k) : nil
+        case nil:
+            value = nil
+        }
+    }
+}
+
+/// One of the hub's shortcuts (10.10.): a chord of modifiers alone ("ctrl+alt", "cmd_r"), watched by
+/// the core, or a key with modifiers ("⌃W"), registered here. In settings.json a chord is a string,
+/// a key {"key", "mods", "label"}.
+enum Shortcut: Codable, Equatable {
+    case chord(String)
+    case key(KeyCombo)
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if let s = try? c.decode(String.self) { self = .chord(s) } else { self = .key(try c.decode(KeyCombo.self)) }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .chord(let s): try c.encode(s)
+        case .key(let k): try c.encode(k)
+        }
+    }
+
+    /// how it reads now (a key through the keyboard layout in use)
+    var readable: String {
+        switch self {
+        case .chord(let s): return HotkeyFormat.display(s)
+        case .key(let k): return k.display
+        }
+    }
+
+    /// as the core reports it in "hotkeys" (a key as "label:⌃W")
+    var spec: String {
+        switch self {
+        case .chord(let s): return s
+        case .key(let k): return "label:" + k.label
+        }
+    }
+}
+
 enum HotkeyFormat {
-    /// "ctrl+shift" → "⌃⇧", "alt_r" → "⌥ rechts" ("⌥ right"), "f13" → "F13" (macOS modifier order ⌃⌥⇧⌘).
+    /// "ctrl+shift" → "⌃⇧", "alt_r" → "⌥ rechts" ("⌥ right"), "f13" → "F13" (macOS modifier order ⌃⌥⇧⌘),
+    /// a key shortcut "label:⌃W" → "⌃W".
     static func display(_ spec: String) -> String {
+        if spec.hasPrefix("label:") {
+            // the core only knows the recorded label: read the key through the layout in use now
+            let label = String(spec.dropFirst(6))
+            let own = IPC.state?.settings.shortcuts.values.compactMap { s -> KeyCombo? in
+                if case .key(let k) = s { return k } else { return nil } }.first { $0.label == label }
+            return own?.display ?? label
+        }
         let order = ["ctrl": 0, "alt": 1, "shift": 2, "cmd": 3]
         let glyph = ["ctrl": "⌃", "alt": "⌥", "shift": "⇧", "cmd": "⌘"]
         var parts: [(rank: Int, text: String, sided: Bool)] = []

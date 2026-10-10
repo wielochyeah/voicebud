@@ -77,6 +77,8 @@ HERE = Path(__file__).resolve().parent
 PROMPTS = HERE / "prompts"
 WORKER = HERE / "llm_worker.py"
 LOAD_TIMEOUT_S = 15.0
+QUEUE_GRACE_S = 90.0     # a request's clock starts when the worker takes it; before that it may wait this
+                         # much longer than its own budget (behind a formula, a prompt being computed)
 RETRY_S = 120.0          # after a load error or a failed start the model is tried again this much later
 
 
@@ -119,6 +121,11 @@ class Cleaner:
         self._keep = False
         self._worker_cmd = worker_cmd
         self._proc = None
+        self._killed = None               # the worker this Cleaner killed itself (that is no crash)
+        self._started = {}                # request id -> when the worker took it from its queue
+        self._first = "doc"               # the system prompt the coming take most likely needs (hint)
+        self._lookahead_off = False       # a worker crashed: lookahead decoding off until a restart
+        self._crashes = 0
         self._ready = threading.Event()
         self._needs_prefill = False       # started for a formula: the dictation prompts follow after
         self._load_s = 0.0
@@ -153,11 +160,28 @@ class Cleaner:
         return venv if venv.exists() else bundled if bundled.exists() else Path(sys.executable)
 
     def _command(self):
+        # a worker that died (not by our hand) may have died in lookahead decoding: the next ones run
+        # without it until VoiceBud restarts (the worker also remembers that per machine)
+        off = ["--lookahead", "off"] if self._lookahead_off else []
         if self._worker_cmd:
-            return list(self._worker_cmd)
+            return list(self._worker_cmd) + off
         cmd = [str(self._python()), "-u", str(WORKER),
                "--model", self.model, "--idle", str(self.idle_s)]
+        snap = None if os.path.isdir(self.model) else hf_snapshot(self.model)
+        if snap is not None or os.path.isdir(self.model):
+            cmd += ["--readahead", str(snap or self.model)]
+        mode = str(self.cfg.get("lookahead", self.cfg.get("speculative", "auto"))).lower()
+        if off:
+            cmd += off
+        elif mode in ("on", "off", "true", "false"):     # YAML reads a bare on/off as a bool
+            cmd += ["--lookahead", "on" if mode in ("on", "true") else "off"]
         return cmd + (["--keep"] if self._keep else [])
+
+    def nudge(self):
+        """A key press: a running worker hears of it at once, so its idle-time lookahead check gives
+        way before the first transcription pass (whatever keepModelsLoaded says)."""
+        if self._alive():
+            self._send({"op": "touch"})
 
     def _alive(self):
         return self._proc is not None and self._proc.poll() is None
@@ -202,11 +226,20 @@ class Cleaner:
         if prefill:
             self._prefill()
 
+    def hint(self, kind):
+        """At the key press: "command" or the front app's style ("doc" | "mail" | "chat"); its system
+        prompt is computed first when the worker starts (the same four prompts as always)."""
+        self._first = kind if kind in ("doc", "mail", "chat", "command") else "doc"
+
     def _prefill(self):
-        # the cached system prompts are ready before the take stops (~0.3 s each, while speaking)
+        # the cached system prompts are ready before the take stops (~0.3 s each on the M5 Pro, while
+        # speaking): the likely one first, one item each, and in the worker after every request
         self._needs_prefill = False
-        self._send({"op": "prefill", "systems": [self.prompts.system("de", st) for st in ("doc", "mail", "chat")]
-                    + [self.prompts.command["de"]]})
+        kinds = ["doc", "mail", "chat", "command"]
+        kinds.sort(key=lambda k: k != self._first)        # stable: the rest keeps its order
+        for k in kinds:
+            system = self.prompts.command["de"] if k == "command" else self.prompts.system("de", k)
+            self._send({"op": "prefill", "systems": [system]})
 
     def _reader(self, proc):
         for line in proc.stdout:
@@ -217,6 +250,8 @@ class Cleaner:
             if msg.get("event") == "ready":
                 self._load_s = float(msg.get("load_s", 0.0))
                 self._ready.set()
+            elif msg.get("event") == "started":           # never an answer: only its clock starts
+                self._started[msg.get("id")] = time.time()
             elif msg.get("event") == "error":
                 print(f"LLM worker: {msg.get('error')}; raw text for {RETRY_S:.0f} s.")
                 self._failed_at = time.time()
@@ -227,11 +262,17 @@ class Cleaner:
                     slot[0].set()
         # the process ended (idle exit, crash or quit): reap it, close its pipes (a long-running
         # VoiceBud sees one idle exit after every pause) and wake every waiting request
+        ours = self._killed is proc
         try:
             proc.wait(timeout=2)
         except subprocess.TimeoutExpired:
+            ours = True
             proc.kill()
             proc.wait()
+        if proc.returncode not in (0, None) and not ours:
+            print(f"LLM worker ended with code {proc.returncode}; it restarts without lookahead decoding.")
+            self._lookahead_off = True
+            self._crashes += 1
         for pipe in (proc.stdin, proc.stdout):
             try:
                 pipe.close()
@@ -267,6 +308,7 @@ class Cleaner:
             try:
                 proc.wait(timeout=2)
             except subprocess.TimeoutExpired:
+                self._killed = proc
                 proc.kill()
                 proc.wait()
 
@@ -287,7 +329,17 @@ class Cleaner:
         self.last_stats["load"] = self._load_s
         return True
 
-    def _generate(self, system, user, max_tokens, temp, timeout, loop_guard=False, ticket=None, stats=None):
+    def _restart(self):
+        """A fresh worker after a crash, ready within LOAD_TIMEOUT_S (its prompts come later)."""
+        self.warm(prefill=False)
+        t = time.time()
+        while not self._ready.wait(0.05):
+            if not self.usable or not self._alive() or time.time() - t > LOAD_TIMEOUT_S:
+                return False
+        return True
+
+    def _generate(self, system, user, max_tokens, temp, timeout, loop_guard=False, ticket=None, stats=None,
+                  retry=True):
         """ticket (a dict) marks a speculative request: it gets the request id (for cancel) and
         yields to every real request in the worker."""
         if ticket is not None and (ticket.get("cancelled") or self._real_pending()):
@@ -298,22 +350,30 @@ class Cleaner:
         self._tags[rid] = "spec" if ticket is not None else getattr(self._tag, "seq", "real")
         if ticket is not None:
             ticket["rid"] = rid
+        crashes = self._crashes
         try:
             if not self._send({"op": "generate", "id": rid, "system": system, "user": user,
                                "max_tokens": max_tokens, "temp": temp, "loop_guard": loop_guard,
                                "spec": ticket is not None}):
                 return None
-            # a formula read ahead of it (one request at a time in the worker): its time is not
-            # this request's, so the clock starts again as long as one is open, instead of killing
-            # the worker and the formula
-            deadline, answered = time.time() + timeout, False
+            # the clock starts when the worker takes the request (10.10.: on a slow Mac the wait in
+            # its queue counted, the worker was killed and the take came back raw); until then the
+            # request may wait QUEUE_GRACE_S longer. A formula read ahead of it (one request at a
+            # time in the worker) is not this request's time either: the clock starts again as long
+            # as one is open, instead of killing the worker and the formula
+            sent = time.time()
+            grace = QUEUE_GRACE_S if ticket is None else 0.0      # a speculation waits as before
+            deadline, answered = sent + timeout + grace, False
             while not answered:
                 answered = slot[0].wait(min(0.25, max(0.0, deadline - time.time())))
                 if answered:
                     break
+                started = self._started.get(rid)
                 if any(tag == "formula" for tag in list(self._tags.values())):
                     deadline = time.time() + timeout
-                elif time.time() >= deadline:
+                elif started is not None and ticket is None:
+                    deadline = max(started, sent) + timeout
+                if time.time() >= deadline:
                     break
             if not answered:
                 if ticket is not None:    # speculative: it only waited behind real work; never kill
@@ -322,6 +382,7 @@ class Cleaner:
                 print(f"LLM did not answer within {timeout:.0f}s; restarting it.")
                 proc = self._proc
                 if proc is not None:
+                    self._killed = proc       # our kill: not a crash
                     proc.kill()
                 return None
             msg = slot[1]
@@ -329,6 +390,10 @@ class Cleaner:
                 if ticket is not None:
                     ticket["cancelled"] = True
                 return None
+            if msg is None and ticket is None and retry and self._crashes != crashes and self._restart():
+                # the worker died under this take (a GPU fault, say): once more on a fresh worker,
+                # which runs without lookahead decoding (see _reader)
+                return self._generate(system, user, max_tokens, temp, timeout, loop_guard, None, stats, retry=False)
             if msg is None or "error" in msg:
                 if msg is not None:
                     print(f"LLM error: {msg['error']}")
@@ -338,6 +403,7 @@ class Cleaner:
         finally:
             self._pending.pop(rid, None)
             self._tags.pop(rid, None)
+            self._started.pop(rid, None)
 
     def _real_pending(self):
         """A real request is waiting for an answer (speculation then stays out of its way)."""

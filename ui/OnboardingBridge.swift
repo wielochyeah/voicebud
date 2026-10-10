@@ -138,6 +138,11 @@ enum OnboardingBridge {
         }
     }
 
+    /// shortcuts changed in the hub while this window is open
+    static func hotkeysChanged(_ keys: [String: String]) {
+        controller?.model?.hotkeys = keys
+    }
+
     static func level(_ bands: [Float]) {
         guard let m = controller?.model, m.step == .testDictation else { return }
         m.receiveLevels(bands)
